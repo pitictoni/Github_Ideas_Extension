@@ -1,0 +1,16 @@
+{
+    "name": "GITHUB IDEAS EXTENSION",
+    "version": "0.0",
+    "manifest_version": 3,
+    "permissions": ["activeTab", "scripting"],
+    "action": {
+        "default_popup": "extension.html",
+        "default_icon": "extension_icon.png"
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/extension.js"]
+        }
+    ]
+}
