@@ -1,16 +1,34 @@
 {
-    "name": "GITHUB IDEAS EXTENSION",
-    "version": "0.0",
+    "name": "GitHub Ideas Extension",
+    "version": "0.1.0",
     "manifest_version": 3,
-    "permissions": ["activeTab", "scripting"],
+    "description": "Save and commit your ideas directly to GitHub repositories",
+    "permissions": [
+        "activeTab", 
+        "scripting",
+        "identity",
+        "storage"
+    ],
     "action": {
         "default_popup": "extension.html",
-        "default_icon": "extension_icon.png"
+        "default_icon": {
+            "16": "extension_icon.png",
+            "48": "extension_icon.png",
+            "128": "extension_icon.png"
+        }
     },
     "content_scripts": [
         {
             "matches": ["<all_urls>"],
-            "js": ["js/extension.js"]
+            "js": ["js/content.js"]
         }
-    ]
+    ],
+    "host_permissions": [
+        "https://github.com/*",
+        "https://api.github.com/*",
+        "http://localhost:5000/*"
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'"
+    }
 }
