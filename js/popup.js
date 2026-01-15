@@ -32,7 +32,7 @@ async function encryptToken(token) {
   const encoder = new TextEncoder();
   const data = encoder.encode(token);
   
-  
+
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     encoder.encode(chrome.runtime.id.padEnd(32, '0')),
@@ -137,7 +137,7 @@ async function getStoredToken() {
 }
 
 async function clearStoredToken() {
-  await chrome.storage.local.remove(['githubToken', 'tokenExpiry', 'codeVerifier']);
+  await chrome.storage.local.remove(['githubToken', 'tokenExpiry', 'codeVerifier', 'repos', 'selectedRepo']);
 }
 
 //Initialize popup
@@ -176,7 +176,7 @@ async function authenticateWithGitHub() {
   const authUrl = `https://github.com/login/oauth/authorize?` +
     `client_id=${CONFIG.GITHUB_CLIENT_ID}` +
     `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
-    `&scope=repo user` +
+    `&scope=repo user gist` +
     `&state=${state}`;
   
   console.log('Auth URL:', authUrl);
@@ -378,16 +378,20 @@ function populateRepoDropdown(repos) {
     repos.map(repo => 
       `<option value="${repo.full_name}">${repo.name}</option>`
     ).join('');
+  
+  chrome.storage.local.set({ repos: repos });
+  
+  select.addEventListener('change', (e) => {
+    const selectedRepo = e.target.value;
+    if (selectedRepo) {
+      chrome.storage.local.set({ selectedRepo: selectedRepo });
+    }
+  });
 }
 
 function showNotification(message, type = 'info') {
   alert(message);
 }
-
-
-
-
-
 
 document.getElementById('showPopup')?.addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
@@ -398,8 +402,24 @@ document.getElementById('showPopup')?.addEventListener('click', () => {
   });
 });
 
-function showInjectedPopup() {
+async function showInjectedPopup() {
   if (document.getElementById("myExtensionPopup")) {
+    return;
+  }
+
+
+  const getExtensionData = () => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['githubToken', 'selectedRepo', 'repos'], (result) => {
+        resolve(result);
+      });
+    });
+  };
+
+  const extensionData = await getExtensionData();
+  
+  if (!extensionData.githubToken) {
+    alert('Please log in to GitHub first!');
     return;
   }
 
@@ -414,36 +434,204 @@ function showInjectedPopup() {
       background: white;
       border: 1px solid #ccc;
       border-radius: 12px;
-      padding: 10px;
+      padding: 1.5%;
       box-shadow: 0 4px 12px rgba(0,0,0,0.2);
       z-index: 999999;
-      width: 30%;
-      height: 30%;
-      cursor: move;
+      width: 400px;
+      min-height: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     ">
-      <div id="popupHeader" style="padding: 10px; cursor: move;">
-        <h6 style="color: black">Notes</h6>
+      <div id="popupHeader" style="padding: 10px; cursor: move; border-bottom: 1px solid #eee; position: relative;">
+        <h6 style="color: black; margin: 0;">GitHub Notes</h6>
+        <div style="font-size: 12px; color: #666; margin-top: 5px;">
+          Repo: <span id="currentRepo" style="font-weight: bold;">${extensionData.selectedRepo || 'None selected'}</span>
+        </div>
+        <button id="closePopup" style="
+        position: absolute;
+        top: 10px;
+        right: 12px;
+        background: transparent;
+        border: none;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        color: #666;
+      ">x</button>
+
       </div>
-      <textarea style="
-        width: 100%; 
-        height: 70%; 
-        border: 1px solid black; 
+      <textarea id="notesTextarea" placeholder="Write your notes here..." style="
+        width: calc(100% - 20px); 
+        height: 200px; 
+        border: 1px solid #ddd; 
         outline: none; 
-        resize: none; 
+        resize: vertical; 
         background-color: white; 
         color: black;
+        padding: 10px;
+        border-radius: 4px;
+        font-size: 14px;
       "></textarea>
-      <div style="display: flex; padding: 10px; justify-content: space-between">
-        <button style="color: black" type="button" class="btn">History</button>
-        <button style="color: black" type="button" class="btn">Commit</button>
+      <div style="display: flex; padding: 10px; justify-content: space-between; align-items: center;">
+        <button id="historyBtn" style="
+          color: white;
+          background: #6c757d;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 4px;
+          cursor: pointer;
+        " type="button">History</button>
+        <div style="display: flex; gap: 10px;">
+          <button id="commitBtn" style="
+            color: white;
+            background: #28a745;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+          " type="button">Commit Gist</button>
+        </div>
       </div>
+      <div id="statusMessage" style="
+        padding: 10px;
+        margin: 0 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        display: none;
+      "></div>
     </div>
   `;
   document.body.appendChild(popup);
 
   const el = popup.querySelector("div");
   const header = popup.querySelector("#popupHeader");
+  const commitBtn = popup.querySelector("#commitBtn");
+  const historyBtn = popup.querySelector("#historyBtn");
+  const textarea = popup.querySelector("#notesTextarea");
+  const statusMessage = popup.querySelector("#statusMessage");
+
   dragElement(el, header);
+
+  //Commit button
+  commitBtn.addEventListener('click', async () => {
+    const notes = textarea.value.trim();
+    
+    if (!notes) {
+      showStatus('Please write some notes first!', 'error');
+      return;
+    }
+
+    if (!extensionData.selectedRepo) {
+      showStatus('Please select a repository in the extension popup!', 'error');
+      return;
+    }
+
+    commitBtn.disabled = true;
+    commitBtn.textContent = 'Committing...';
+
+    try {
+
+
+      const tokenData = await decryptTokenInContent(extensionData.githubToken);
+      const token = JSON.parse(tokenData).access_token;
+
+
+      const filename = `${extensionData.selectedRepo.replace('/', '-')}-notes.md`;
+      const response = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          description: `Notes for ${extensionData.selectedRepo}`,
+          public: false,
+          files: {
+            [filename]: {
+              content: notes
+            }
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create gist');
+      }
+
+      const gist = await response.json();
+      showStatus(`Gist created successfully! <a href="${gist.html_url}" target="_blank" style="color: white; text-decoration: underline;">View Gist</a>`, 'success');
+      textarea.value = '';
+    } catch (error) {
+      console.error('Commit error:', error);
+      showStatus('Failed to create gist: ' + error.message, 'error');
+    } finally {
+      commitBtn.disabled = false;
+      commitBtn.textContent = '📝 Commit to Gist';
+    }
+  });
+
+
+  function showStatus(message, type) {
+    statusMessage.innerHTML = message;
+    statusMessage.style.display = 'block';
+    
+    if (type === 'success') {
+      statusMessage.style.background = '#d4edda';
+      statusMessage.style.color = '#155724';
+      statusMessage.style.border = '1px solid #c3e6cb';
+    } else if (type === 'error') {
+      statusMessage.style.background = '#f8d7da';
+      statusMessage.style.color = '#721c24';
+      statusMessage.style.border = '1px solid #f5c6cb';
+    } else {
+      statusMessage.style.background = '#d1ecf1';
+      statusMessage.style.color = '#0c5460';
+      statusMessage.style.border = '1px solid #bee5eb';
+    }
+
+    setTimeout(() => {
+      statusMessage.style.display = 'none';
+    }, 5000);
+  }
+
+
+  async function decryptTokenInContent(encryptedData) {
+    const encoder = new TextEncoder();
+    const extensionId = chrome.runtime.id;
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(extensionId.padEnd(32, '0')),
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: encoder.encode('github-oauth-salt'),
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    
+    const encrypted = Uint8Array.from(atob(encryptedData.encrypted.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    const iv = Uint8Array.from(atob(encryptedData.iv.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encrypted
+    );
+    
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  }
 
   function dragElement(elmnt, dragHandle) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
@@ -473,4 +661,9 @@ function showInjectedPopup() {
       document.onmousemove = null;
     }
   }
+
+  document.getElementById("closePopup").addEventListener("click", () => {
+    document.getElementById("myExtensionPopup")?.remove();
+  });
+
 }
