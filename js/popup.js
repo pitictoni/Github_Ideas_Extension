@@ -5,7 +5,7 @@ console.log('Redirect URI:', chrome.identity.getRedirectURL());
 
 const CONFIG = {
   GITHUB_CLIENT_ID: '',
-  BACKEND_URL: '',
+  BACKEND_URL: 'http://localhost:5000',
   REDIRECT_URI: chrome.identity.getRedirectURL()
 };
 
@@ -179,10 +179,6 @@ async function authenticateWithGitHub() {
     `&scope=repo user gist` +
     `&state=${state}`;
   
-  console.log('Auth URL:', authUrl);
-  console.log('Client ID:', CONFIG.GITHUB_CLIENT_ID);
-  console.log('Redirect URI:', CONFIG.REDIRECT_URI);
-  
   return new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
       {
@@ -190,9 +186,6 @@ async function authenticateWithGitHub() {
         interactive: true
       },
       async (redirectUrl) => {
-        console.log('Redirect URL received:', redirectUrl);
-        console.log('Chrome runtime error:', chrome.runtime.lastError);
-        
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError);
           return;
@@ -423,6 +416,11 @@ async function showInjectedPopup() {
     return;
   }
 
+  if (!extensionData.selectedRepo) {
+    alert('Please select a repository first!');
+    return;
+  }
+
   const popup = document.createElement("div");
   popup.id = "myExtensionPopup";
   popup.innerHTML = `
@@ -434,17 +432,22 @@ async function showInjectedPopup() {
       background: white;
       border: 1px solid #ccc;
       border-radius: 12px;
-      padding: 1.5%;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      padding: 0;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
       z-index: 999999;
-      width: 400px;
-      min-height: 300px;
+      width: 450px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     ">
-      <div id="popupHeader" style="padding: 10px; cursor: move; border-bottom: 1px solid #eee; position: relative;">
-        <h6 style="color: black; margin: 0;">GitHub Notes</h6>
-        <div style="font-size: 12px; color: #666; margin-top: 5px;">
-          Repo: <span id="currentRepo" style="font-weight: bold;">${extensionData.selectedRepo || 'None selected'}</span>
+      <div id="popupHeader" style="
+        padding: 16px;
+        cursor: move;
+        background-color: green;
+        color: white;
+        border-radius: 12px 12px 0 0;
+      ">
+        <h6 style="margin: 0; font-size: 16px; font-weight: 600;">GitHub Notes</h6>
+        <div style="font-size: 13px; opacity: 0.9; margin-top: 4px;">
+          ${extensionData.selectedRepo}
         </div>
         <button id="closePopup" style="
         position: absolute;
@@ -455,49 +458,136 @@ async function showInjectedPopup() {
         font-size: 18px;
         font-weight: bold;
         cursor: pointer;
-        color: #666;
+        color: white;
       ">x</button>
 
       </div>
-      <textarea id="notesTextarea" placeholder="Write your notes here..." style="
-        width: calc(100% - 20px); 
-        height: 200px; 
-        border: 1px solid #ddd; 
-        outline: none; 
-        resize: vertical; 
-        background-color: white; 
-        color: black;
-        padding: 10px;
-        border-radius: 4px;
-        font-size: 14px;
-      "></textarea>
-      <div style="display: flex; padding: 10px; justify-content: space-between; align-items: center;">
-        <button id="historyBtn" style="
-          color: white;
-          background: #6c757d;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 4px;
-          cursor: pointer;
-        " type="button">History</button>
-        <div style="display: flex; gap: 10px;">
-          <button id="commitBtn" style="
-            color: white;
-            background: #28a745;
-            border: none;
-            padding: 8px 16px;
+      
+      <div>
+        <div id="loadingIndicator" style="
+          text-align: center;
+          padding: 20px;
+          color: #666;
+        ">
+          Loading existing notes...
+        </div>
+        
+        <div id="mainContent" style="display: none; padding: 12px 12px 0 12px; box-sizing: border-box;">
+
+          <!-- Gist Title Input -->
+          <div style="margin-bottom: 10px;">
+            <label style="
+              display: block;
+              font-size: 12px;
+              font-weight: 600;
+              color: #444;
+              margin-bottom: 4px;
+            ">
+              Note Title (Gist Name)
+            </label>
+            <input id="gistTitleInput" type="text" style="
+              width: 100%;
+              padding: 8px 10px;
+              border: 1px solid #ddd;
+              border-radius: 6px;
+              font-size: 13px;
+              outline: none;
+              box-sizing: border-box;
+            "/>
+          </div>
+
+          <textarea id="notesTextarea" placeholder="Write your notes here..." style="
+            width: 100%; 
+            height: 200px; 
+            border: 1px solid #ddd; 
+            outline: none; 
+            resize: vertical; 
+            background-color: #fafafa; 
+            color: #333;
+            padding: 12px;
+            font-size: 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            box-sizing: border-box;
+          "></textarea>
+          
+          <div id="gistInfo" style="
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+            padding: 8px;
+            background: #f8f9fa;
             border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-          " type="button">Commit Gist</button>
+            display: none;
+          ">
+            <span id="lastUpdated"></span>
+            <a id="viewGistLink" href="#" target="_blank" style="
+              color: #667eea;
+              text-decoration: none;
+              margin-left: 12px;
+            ">View on GitHub →</a>
+          </div>
+          
+          <div style="margin-top: 12px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+            <label style="
+              display: flex;
+              align-items: center;
+              cursor: pointer;
+              font-size: 13px;
+              color: #555;
+            ">
+              <input type="checkbox" id="createNewCheckbox" style="
+                margin-right: 8px;
+                width: 16px;
+                height: 16px;
+                cursor: pointer;
+              ">
+              <span>Create a new note instead of updating the existing one.</span>
+            </label>
+          </div>
         </div>
       </div>
+      
+      <div style="
+        display: flex;
+        padding: 12px 16px;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid #eee;
+        background: #fafafa;
+        border-radius: 0 0 12px 12px;
+      ">
+        <button id="historyBtn" style="
+          color: #667eea;
+          background: white;
+          border: 1px solid #667eea;
+          padding: 10px 18px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          transition: all 0.2s;
+        " type="button">History</button>
+        
+        <button id="commitBtn" style="
+          color: white;
+          background-color: green;
+          border: none;
+          padding: 10px 24px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 600;
+          font-size: 14px;
+          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+          transition: all 0.2s;
+        " type="button">Save Changes</button>
+      </div>
+      
       <div id="statusMessage" style="
-        padding: 10px;
-        margin: 0 10px;
-        border-radius: 4px;
-        font-size: 12px;
+        padding: 12px 16px;
+        margin: 0;
+        font-size: 13px;
         display: none;
+        border-radius: 0 0 12px 12px;
       "></div>
     </div>
   `;
@@ -508,69 +598,337 @@ async function showInjectedPopup() {
   const commitBtn = popup.querySelector("#commitBtn");
   const historyBtn = popup.querySelector("#historyBtn");
   const textarea = popup.querySelector("#notesTextarea");
+  const gistTitleInput = popup.querySelector("#gistTitleInput");
   const statusMessage = popup.querySelector("#statusMessage");
+  const createNewCheckbox = popup.querySelector("#createNewCheckbox");
+  const gistInfo = popup.querySelector("#gistInfo");
+  const lastUpdated = popup.querySelector("#lastUpdated");
+  const viewGistLink = popup.querySelector("#viewGistLink");
+  const loadingIndicator = popup.querySelector("#loadingIndicator");
+  const mainContent = popup.querySelector("#mainContent");
+
+  let existingGist = null;
 
   dragElement(el, header);
 
-  //Commit button
+  //Load existing gist on startup
+  await loadExistingGist();
+
+  async function loadExistingGist() {
+    try {
+      const tokenData = await decryptTokenInContent(extensionData.githubToken);
+      const token = JSON.parse(tokenData).access_token;
+
+      //1. List gists (metadata only)
+      const response = await fetch('https://api.github.com/gists', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to list gists');
+
+      const gists = await response.json();
+
+      const found = gists.find(g =>
+        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`) &&
+        Object.values(g.files).some(f => f.filename.endsWith('.md'))
+      );
+
+      if (!found) return;
+
+      //2. Fetch FULL gist (this contains file.content)
+      const fullResponse = await fetch(`https://api.github.com/gists/${found.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!fullResponse.ok) throw new Error('Failed to fetch full gist');
+
+      existingGist = await fullResponse.json();
+
+      //3. Safely read real file
+      const fileKey = Object.keys(existingGist.files)[0];
+      const file = existingGist.files[fileKey];
+
+      if (!file?.content) {
+        throw new Error('Gist content missing after full fetch');
+      }
+
+      textarea.value = file.content;
+
+      //4. Restore title
+      const title = existingGist.description.replace(
+        `Notes for ${extensionData.selectedRepo} - `,
+        ''
+      );
+      gistTitleInput.value = title || '';
+
+      //5. Show metadata
+      const updatedDate = new Date(existingGist.updated_at);
+      lastUpdated.textContent = `Last updated ${getTimeAgo(updatedDate)}`;
+      viewGistLink.href = existingGist.html_url;
+      gistInfo.style.display = 'block';
+
+    } catch (error) {
+      console.error('Error loading existing gist:', error);
+    } finally {
+      loadingIndicator.style.display = 'none';
+      mainContent.style.display = 'block';
+    }
+  }
+
+
+  function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+    return date.toLocaleDateString();
+  }
+
+
   commitBtn.addEventListener('click', async () => {
     const notes = textarea.value.trim();
+    const customTitle = gistTitleInput.value.trim();
+    const safeTitle = customTitle
+      ? customTitle.replace(/[^a-z0-9-_ ]/gi, '').replace(/\s+/g, '-').toLowerCase()
+      : extensionData.selectedRepo.replace('/', '-');
+
+    const baseName = `${safeTitle}-notes`;
+
     
     if (!notes) {
       showStatus('Please write some notes first!', 'error');
       return;
     }
 
-    if (!extensionData.selectedRepo) {
-      showStatus('Please select a repository in the extension popup!', 'error');
-      return;
-    }
-
+    const createNew = createNewCheckbox.checked;
     commitBtn.disabled = true;
-    commitBtn.textContent = 'Committing...';
+    commitBtn.innerHTML = 'Saving...';
 
     try {
-
-
       const tokenData = await decryptTokenInContent(extensionData.githubToken);
       const token = JSON.parse(tokenData).access_token;
+      
+      let timestamp = '';
+      if (createNew) {
+        timestamp = `-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+      }
+      
+      const filename = `${baseName}${timestamp}.md`;
 
+      if (!createNew && existingGist) {
 
-      const filename = `${extensionData.selectedRepo.replace('/', '-')}-notes.md`;
-      const response = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          description: `Notes for ${extensionData.selectedRepo}`,
-          public: false,
-          files: {
-            [filename]: {
-              content: notes
+        const fileKey = Object.keys(existingGist.files)[0];
+        const response = await fetch(`https://api.github.com/gists/${existingGist.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            description: `Notes for ${extensionData.selectedRepo} - ${customTitle || 'General'}`,
+            files: {
+              [fileKey]: {
+                content: notes
+              }
             }
-          }
-        })
-      });
+          })
+
+        });
+
+        if (!response.ok) throw new Error('Failed to update gist');
+
+        const gist = await response.json();
+        existingGist = gist;
+        
+        const updatedDate = new Date(gist.updated_at);
+        lastUpdated.textContent = `Last updated ${getTimeAgo(updatedDate)}`;
+        viewGistLink.href = gist.html_url;
+        gistInfo.style.display = 'block';
+        
+        showStatus('Notes updated successfully!', 'success');
+      } else {
+
+        const response = await fetch('https://api.github.com/gists', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            description: `Notes for ${extensionData.selectedRepo} - ${customTitle || 'General'}`,
+            public: false,
+            files: {
+              [filename]: {
+                content: notes
+              }
+            }
+          })
+        });
 
       if (!response.ok) {
         throw new Error('Failed to create gist');
       }
 
-      const gist = await response.json();
-      showStatus(`Gist created successfully! <a href="${gist.html_url}" target="_blank" style="color: white; text-decoration: underline;">View Gist</a>`, 'success');
-      textarea.value = '';
+        const gist = await response.json();
+        
+        if (!createNew) {
+          existingGist = gist;
+          const updatedDate = new Date(gist.updated_at);
+          lastUpdated.textContent = `Last updated ${getTimeAgo(updatedDate)}`;
+          viewGistLink.href = gist.html_url;
+          gistInfo.style.display = 'block';
+        }
+        
+        showStatus(`New note created! <a href="${gist.html_url}" target="_blank" style="color: white; text-decoration: underline;">View Gist →</a>`, 'success');
+        
+        if (createNew) {
+          createNewCheckbox.checked = false;
+        }
+      }
     } catch (error) {
       console.error('Commit error:', error);
-      showStatus('Failed to create gist: ' + error.message, 'error');
+      showStatus('Failed to save: ' + error.message, 'error');
     } finally {
       commitBtn.disabled = false;
-      commitBtn.textContent = '📝 Commit to Gist';
+      commitBtn.innerHTML = 'Save Changes';
     }
   });
 
+
+  historyBtn.addEventListener('click', async () => {
+    historyBtn.disabled = true;
+    historyBtn.textContent = 'Loading...';
+    
+    try {
+      const tokenData = await decryptTokenInContent(extensionData.githubToken);
+      const token = JSON.parse(tokenData).access_token;
+
+      const response = await fetch('https://api.github.com/gists', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch gists');
+
+      const allGists = await response.json();
+      const repoGists = allGists.filter(g =>
+        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`) &&
+        Object.values(g.files).some(f => f.filename.endsWith('.md'))
+      );
+
+
+
+      if (repoGists.length === 0) {
+        showStatus('No notes found for this repository', 'info');
+      } else {
+        let historyHTML = `<div style="max-height: 300px; overflow-y: auto; padding: 10px;">`;
+        historyHTML += `<h4 style="margin: 0 0 12px 0; color: #333;">Notes History (${repoGists.length})</h4>`;
+        
+        repoGists.forEach(gist => {
+          const date = new Date(gist.updated_at);
+          historyHTML += `
+            <div style="
+              padding: 10px;
+              margin-bottom: 8px;
+              background: #f8f9fa;
+              border-radius: 6px;
+              border-left: 3px solid #667eea;
+            ">
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+                ${date.toLocaleString()}
+              </div>
+              <a href="${gist.html_url}" target="_blank" style="
+                color: #667eea;
+                text-decoration: none;
+                font-size: 13px;
+              ">View on GitHub →</a>
+            </div>
+          `;
+        });
+        
+        historyHTML += `</div>`;
+        
+        //History modal
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.5);
+          z-index: 9999999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+        
+        modal.innerHTML = `
+          <div style="
+            background: white;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+          ">
+            <div style="
+              padding: 16px;
+              background-color: green;
+              color: white;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            ">
+              <h3 style="margin: 0;">Notes History</h3>
+              <button id="closeModal" style="
+                background: transparent;
+                border: none;
+                color: white;
+                font-size: 24px;
+                cursor: pointer;
+                padding: 0;
+                width: 30px;
+                height: 30px;
+              ">×</button>
+            </div>
+            ${historyHTML}
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelector('#closeModal').addEventListener('click', () => {
+          modal.remove();
+        });
+        
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+          }
+        });
+      }
+    } catch (error) {
+      console.error('History error:', error);
+      showStatus('Failed to load history: ' + error.message, 'error');
+    } finally {
+      historyBtn.disabled = false;
+      historyBtn.textContent = 'History';
+    }
+  });
 
   function showStatus(message, type) {
     statusMessage.innerHTML = message;
