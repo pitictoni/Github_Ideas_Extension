@@ -373,6 +373,12 @@ function populateRepoDropdown(repos) {
     ).join('');
   
   chrome.storage.local.set({ repos: repos });
+
+  chrome.storage.local.get("selectedRepo", (result) => {
+    if (result.selectedRepo) {
+      select.value = result.selectedRepo;
+    }
+  });
   
   select.addEventListener('change', (e) => {
     const selectedRepo = e.target.value;
@@ -439,7 +445,7 @@ async function showInjectedPopup() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     ">
       <div id="popupHeader" style="
-        padding: 16px;
+        padding: 10px;
         cursor: move;
         background-color: green;
         color: white;
@@ -476,15 +482,44 @@ async function showInjectedPopup() {
 
           <!-- Gist Title Input -->
           <div style="margin-bottom: 10px;">
-            <label style="
-              display: block;
-              font-size: 12px;
-              font-weight: 600;
-              color: #444;
-              margin-bottom: 4px;
-            ">
-              Note Title (Gist Name)
-            </label>
+            <div style="display: flex; justify-content: space-between;">
+              <h1 style="
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                color: #444;
+                margin-bottom: 4px;
+              ">
+                Note Title (Gist Name)
+              </h1>
+              <a href="https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax"
+                target="_blank"
+                title="GitHub Basic writing and Formatting Syntax"
+                rel="noopener noreferrer">
+
+                <svg xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    fill="currentColor"
+                    style="cursor: pointer; color: #444;"
+                    class="bi bi-github me-2"
+                    viewBox="0 0 17 17">
+
+                  <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 
+                  0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                  -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 
+                  2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 
+                  0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.12 0 0 
+                  .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 
+                  1.53-1.04 2.2-.82 2.2-.82.44 1.11.16 1.92.08 2.12.51.56.82 
+                  1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 
+                  1.48 0 1.07-.01 1.93-.01 2.19 0 .21.15.46.55.38A8.013 
+                  8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                </svg>
+
+              </a>
+
+            </div>
             <input id="gistTitleInput" type="text" style="
               width: 100%;
               padding: 8px 10px;
@@ -493,12 +528,14 @@ async function showInjectedPopup() {
               font-size: 13px;
               outline: none;
               box-sizing: border-box;
+              background-color: #fafafa;
+              color: #333;
             "/>
           </div>
 
           <textarea id="notesTextarea" placeholder="Write your notes here..." style="
             width: 100%; 
-            height: 200px; 
+            height: 150px; 
             border: 1px solid #ddd; 
             outline: none; 
             resize: vertical; 
@@ -514,7 +551,6 @@ async function showInjectedPopup() {
             font-size: 12px;
             color: #666;
             margin-top: 8px;
-            padding: 8px;
             background: #f8f9fa;
             border-radius: 4px;
             display: none;
@@ -527,7 +563,7 @@ async function showInjectedPopup() {
             ">View on GitHub →</a>
           </div>
           
-          <div style="margin-top: 12px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+          <div style="margin-top: 12px; background: #f8f9fa; border-radius: 6px;">
             <label style="
               display: flex;
               align-items: center;
@@ -903,7 +939,7 @@ async function showInjectedPopup() {
                 padding: 0;
                 width: 30px;
                 height: 30px;
-              ">×</button>
+              ">x</button>
             </div>
             ${historyHTML}
           </div>
