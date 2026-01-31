@@ -5,7 +5,7 @@ console.log('Redirect URI:', chrome.identity.getRedirectURL());
 
 const CONFIG = {
   GITHUB_CLIENT_ID: '',
-  BACKEND_URL: 'http://localhost:5000',
+  BACKEND_URL: '',
   REDIRECT_URI: chrome.identity.getRedirectURL()
 };
 
@@ -176,7 +176,7 @@ async function authenticateWithGitHub() {
   const authUrl = `https://github.com/login/oauth/authorize?` +
     `client_id=${CONFIG.GITHUB_CLIENT_ID}` +
     `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
-    `&scope=repo user gist` +
+    `&scope=repo gist read:user` +
     `&state=${state}`;
   
   return new Promise((resolve, reject) => {
@@ -221,8 +221,8 @@ async function authenticateWithGitHub() {
 async function exchangeCodeForToken(code) {
   try {
     console.log('Exchanging code for token...');
-    console.log('Backend URL:', CONFIG.BACKEND_URL);
-    console.log('Code:', code);
+    //console.log('Backend URL:', CONFIG.BACKEND_URL);
+    //console.log('Code:', code);
     console.log('Redirect URI:', CONFIG.REDIRECT_URI);
     
     const response = await fetch(`${CONFIG.BACKEND_URL}/api/github/token`, {
