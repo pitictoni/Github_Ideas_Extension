@@ -1,4 +1,3 @@
-
 console.log('Extension ID:', chrome.runtime.id);
 console.log('Redirect URI:', chrome.identity.getRedirectURL());
 
@@ -409,7 +408,7 @@ async function showInjectedPopup() {
 
   const getExtensionData = () => {
     return new Promise((resolve) => {
-      chrome.storage.local.get(['githubToken', 'selectedRepo', 'repos'], (result) => {
+      chrome.storage.local.get(['githubToken', 'selectedRepo', 'repos', 'theme'], (result) => {
         resolve(result);
       });
     });
@@ -427,6 +426,36 @@ async function showInjectedPopup() {
     return;
   }
 
+  // Get theme preference from storage or system
+  let currentTheme = extensionData.theme;
+  if (!currentTheme) {
+    currentTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  const style = document.createElement('style');
+  style.id = 'extensionPopupStyle';
+  style.textContent = `
+    #myExtensionPopup {
+      --bg: ${currentTheme === 'dark' ? '#1a1a1a' : '#ffffff'};
+      --bg-soft: ${currentTheme === 'dark' ? '#2d2d2d' : '#f8f9fa'};
+      --bg-popup: ${currentTheme === 'dark' ? '#1a1a1a' : '#ffffff'};
+      --border: ${currentTheme === 'dark' ? '#495057' : '#e0e0e0'};
+      --text: ${currentTheme === 'dark' ? '#e9ecef' : '#1f2937'};
+      --text-muted: ${currentTheme === 'dark' ? '#adb5bd' : '#6b7280'};
+      --accent: #22c55e;
+      --accent-soft: ${currentTheme === 'dark' ? '#052e16' : '#dcfce7'};
+      --danger: ${currentTheme === 'dark' ? '#f87171' : '#ef4444'};
+      --danger-soft: ${currentTheme === 'dark' ? '#450a0a' : '#fee2e2'};
+      --info-soft: ${currentTheme === 'dark' ? '#083344' : '#d1ecf1'};
+      --input-bg: ${currentTheme === 'dark' ? '#2d2d2d' : '#fafafa'};
+      --input-border: ${currentTheme === 'dark' ? '#495057' : '#ddd'};
+      --modal-bg: ${currentTheme === 'dark' ? '#1a1a1a' : '#ffffff'};
+      --history-item-bg: ${currentTheme === 'dark' ? '#2d2d2d' : '#f8f9fa'};
+    }
+  `;
+  document.head.appendChild(style);
+
+
   const popup = document.createElement("div");
   popup.id = "myExtensionPopup";
   popup.innerHTML = `
@@ -435,8 +464,8 @@ async function showInjectedPopup() {
       top: 20%;
       left: 50%;
       transform: translateX(-50%);
-      background: white;
-      border: 1px solid #ccc;
+      background: var(--bg-popup);
+      border: 1px solid var(--border);
       border-radius: 12px;
       padding: 0;
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
@@ -451,8 +480,8 @@ async function showInjectedPopup() {
         color: white;
         border-radius: 12px 12px 0 0;
       ">
-        <h6 style="margin: 0; font-size: 16px; font-weight: 600;">GitHub Notes</h6>
-        <div style="font-size: 13px; opacity: 0.9; margin-top: 4px;">
+        <h6 style="margin: 0; font-size: 16px; font-weight: 600; color: white;">GitHub Notes</h6>
+        <div style="font-size: 13px; opacity: 0.9; margin-top: 4px; color: white;">
           ${extensionData.selectedRepo}
         </div>
         <button id="closePopup" style="
@@ -465,7 +494,7 @@ async function showInjectedPopup() {
         font-weight: bold;
         cursor: pointer;
         color: white;
-      ">x</button>
+      ">×</button>
 
       </div>
       
@@ -473,7 +502,7 @@ async function showInjectedPopup() {
         <div id="loadingIndicator" style="
           text-align: center;
           padding: 20px;
-          color: #666;
+          color: var(--text-muted);
         ">
           Loading existing notes...
         </div>
@@ -487,7 +516,7 @@ async function showInjectedPopup() {
                 display: block;
                 font-size: 12px;
                 font-weight: 600;
-                color: #444;
+                color: var(--text);
                 margin-bottom: 4px;
               ">
                 Note Title (Gist Name)
@@ -501,7 +530,7 @@ async function showInjectedPopup() {
                     width="20"
                     height="20"
                     fill="currentColor"
-                    style="cursor: pointer; color: #444;"
+                    style="cursor: pointer; color: var(--text);"
                     class="bi bi-github me-2"
                     viewBox="0 0 17 17">
 
@@ -523,36 +552,38 @@ async function showInjectedPopup() {
             <input id="gistTitleInput" type="text" style="
               width: 100%;
               padding: 8px 10px;
-              border: 1px solid #ddd;
+              border: 1px solid var(--input-border);
               border-radius: 6px;
               font-size: 13px;
               outline: none;
               box-sizing: border-box;
-              background-color: #fafafa;
-              color: #333;
+              background-color: var(--input-bg);
+              color: var(--text);
             "/>
           </div>
 
           <textarea id="notesTextarea" placeholder="Write your notes here..." style="
             width: 100%; 
             height: 150px; 
-            border: 1px solid #ddd; 
+            border: 1px solid var(--input-border); 
             outline: none; 
             resize: vertical; 
-            background-color: #fafafa; 
-            color: #333;
+            background-color: var(--input-bg); 
+            color: var(--text);
             padding: 12px;
             font-size: 14px;
             font-family: 'Consolas', 'Monaco', monospace;
             box-sizing: border-box;
+            border-radius: 6px;
           "></textarea>
           
           <div id="gistInfo" style="
             font-size: 12px;
-            color: #666;
+            color: var(--text-muted);
             margin-top: 8px;
-            background: #f8f9fa;
+            background: var(--bg-soft);
             border-radius: 4px;
+            padding: 8px;
             display: none;
           ">
             <span id="lastUpdated"></span>
@@ -563,13 +594,13 @@ async function showInjectedPopup() {
             ">View on GitHub →</a>
           </div>
           
-          <div style="margin-top: 12px; background: #f8f9fa; border-radius: 6px;">
+          <div style="margin-top: 12px; background: var(--bg-soft); border-radius: 6px; padding: 8px;">
             <label style="
               display: flex;
               align-items: center;
               cursor: pointer;
               font-size: 13px;
-              color: #555;
+              color: var(--text);
             ">
               <input type="checkbox" id="createNewCheckbox" style="
                 margin-right: 8px;
@@ -588,13 +619,13 @@ async function showInjectedPopup() {
         padding: 12px 16px;
         justify-content: space-between;
         align-items: center;
-        border-top: 1px solid #eee;
-        background: #fafafa;
+        border-top: 1px solid var(--border);
+        background: var(--bg-soft);
         border-radius: 0 0 12px 12px;
       ">
         <button id="historyBtn" style="
           color: #667eea;
-          background: white;
+          background: var(--bg-popup);
           border: 1px solid #667eea;
           padding: 10px 18px;
           border-radius: 6px;
@@ -628,6 +659,49 @@ async function showInjectedPopup() {
     </div>
   `;
   document.body.appendChild(popup);
+
+  // Listen for theme changes
+  const updateTheme = (newTheme) => {
+    const styleEl = document.getElementById('extensionPopupStyle');
+    if (styleEl) {
+      styleEl.textContent = `
+        #myExtensionPopup {
+          --bg: ${newTheme === 'dark' ? '#1a1a1a' : '#ffffff'};
+          --bg-soft: ${newTheme === 'dark' ? '#2d2d2d' : '#f8f9fa'};
+          --bg-popup: ${newTheme === 'dark' ? '#1a1a1a' : '#ffffff'};
+          --border: ${newTheme === 'dark' ? '#495057' : '#e0e0e0'};
+          --text: ${newTheme === 'dark' ? '#e9ecef' : '#1f2937'};
+          --text-muted: ${newTheme === 'dark' ? '#adb5bd' : '#6b7280'};
+          --accent: #22c55e;
+          --accent-soft: ${newTheme === 'dark' ? '#052e16' : '#dcfce7'};
+          --danger: ${newTheme === 'dark' ? '#f87171' : '#ef4444'};
+          --danger-soft: ${newTheme === 'dark' ? '#450a0a' : '#fee2e2'};
+          --info-soft: ${newTheme === 'dark' ? '#083344' : '#d1ecf1'};
+          --input-bg: ${newTheme === 'dark' ? '#2d2d2d' : '#fafafa'};
+          --input-border: ${newTheme === 'dark' ? '#495057' : '#ddd'};
+          --modal-bg: ${newTheme === 'dark' ? '#1a1a1a' : '#ffffff'};
+          --history-item-bg: ${newTheme === 'dark' ? '#2d2d2d' : '#f8f9fa'};
+        }
+      `;
+    }
+  };
+
+  // Listen for storage changes (when theme toggle is clicked)
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.theme) {
+      updateTheme(changes.theme.newValue);
+    }
+  });
+
+  // Listen for system theme changes
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    chrome.storage.local.get('theme', (result) => {
+      if (!result.theme) {
+        updateTheme(e.matches ? 'dark' : 'light');
+      }
+    });
+  });
+
 
   const el = popup.querySelector("div");
   const header = popup.querySelector("#popupHeader");
@@ -869,8 +943,21 @@ async function showInjectedPopup() {
       if (repoGists.length === 0) {
         showStatus('No notes found for this repository', 'info');
       } else {
+        // Get current theme for modal
+        const modalTheme = await new Promise((resolve) => {
+          chrome.storage.local.get('theme', (result) => {
+            const theme = result.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            resolve(theme);
+          });
+        });
+
+        const modalBg = modalTheme === 'dark' ? '#1a1a1a' : '#ffffff';
+        const modalText = modalTheme === 'dark' ? '#e9ecef' : '#333';
+        const modalTextMuted = modalTheme === 'dark' ? '#adb5bd' : '#666';
+        const modalItemBg = modalTheme === 'dark' ? '#2d2d2d' : '#f8f9fa';
+
         let historyHTML = `<div style="max-height: 300px; overflow-y: auto; padding: 10px;">`;
-        historyHTML += `<h4 style="margin: 0 0 12px 0; color: #333;">Notes History (${repoGists.length})</h4>`;
+        historyHTML += `<h4 style="margin: 0 0 12px 0; color: ${modalText};">Notes History (${repoGists.length})</h4>`;
         
         repoGists.forEach(gist => {
           const date = new Date(gist.updated_at);
@@ -878,11 +965,11 @@ async function showInjectedPopup() {
             <div style="
               padding: 10px;
               margin-bottom: 8px;
-              background: #f8f9fa;
+              background: ${modalItemBg};
               border-radius: 6px;
               border-left: 3px solid #667eea;
             ">
-              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+              <div style="font-size: 12px; color: ${modalTextMuted}; margin-bottom: 4px;">
                 ${date.toLocaleString()}
               </div>
               <a href="${gist.html_url}" target="_blank" style="
@@ -913,7 +1000,7 @@ async function showInjectedPopup() {
         
         modal.innerHTML = `
           <div style="
-            background: white;
+            background: ${modalBg};
             border-radius: 12px;
             max-width: 500px;
             width: 90%;
@@ -929,7 +1016,7 @@ async function showInjectedPopup() {
               justify-content: space-between;
               align-items: center;
             ">
-              <h3 style="margin: 0;">Notes History</h3>
+              <h3 style="margin: 0; color: white;">Notes History</h3>
               <button id="closeModal" style="
                 background: transparent;
                 border: none;
@@ -939,7 +1026,7 @@ async function showInjectedPopup() {
                 padding: 0;
                 width: 30px;
                 height: 30px;
-              ">x</button>
+              ">×</button>
             </div>
             ${historyHTML}
           </div>

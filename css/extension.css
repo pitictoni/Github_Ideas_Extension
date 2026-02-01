@@ -1,31 +1,181 @@
+:root {
+    /* Light mode colors (default) */
+    --bg-primary: #ffffff;
+    --bg-secondary: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #1a1a1a;
+    --border-color: #dee2e6;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --switch-off: #6c757d;
+    --switch-on: #198754;
+    --github-btn-bg: #ffffff;
+    --github-btn-hover: #adb5bd;
+}
+
+[data-theme="dark"] {
+    /* Dark mode colors */
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-primary: #ffffff;
+    --text-secondary: #ffffff;
+    --border-color: #495057;
+    --input-bg: #2d2d2d;
+    --input-border: #495057;
+    --switch-off: #6c757d;
+    --switch-on: #198754;
+    --github-btn-bg: #1a1a1a;
+    --github-btn-hover: #adb5bd;
+}
+
+/* Auto detect system preference */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg-primary: #1a1a1a;
+        --bg-secondary: #2d2d2d;
+        --text-primary: #e9ecef;
+        --text-secondary: #adb5bd;
+        --border-color: #495057;
+        --input-bg: #2d2d2d;
+        --input-border: #495057;
+        --github-btn-bg: #2d2d2d;
+        --github-btn-hover: #444d56;
+    }
+}
+
 html {
     width: 400px;
     height: 100px;
 }
 
+body {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.container {
+    background-color: var(--bg-primary) !important;
+}
+
+h6 {
+    color: var(--text-primary) !important;
+    margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6, p, span, div, label {
+    color: var(--text-primary) !important;
+}
+
+hr {
+  margin: 0 !important;
+}
+
+.form-select {
+    background-color: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--input-border) !important;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.form-select:focus {
+    background-color: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--switch-on) !important;
+    box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.25) !important;
+}
+
+.form-select option {
+    background-color: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+}
+
+/* SVG icon color */
+.bi-circle-square {
+    color: var(--text-primary);
+    transition: color 0.3s ease;
+}
+
+.bi-circle-square:hover {
+    color: var(--switch-on);
+}
+
+/* Toggle switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 45px; 
+    height: 19px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--switch-off);
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 11px;
+    width: 11px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+.slider.round {
+    border-radius: 34px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--switch-on);
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
 .btn-github {
-  background-color: #24292e;
-  color: #fff;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  transition: background-color 0.2s ease, transform 0.1s ease;
+    background-color: var(--github-btn-bg) !important;
+    color: var(--text-primary) !important;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
 .btn-github:hover {
-  background-color: #1b1f23;
-  color: #fff;
+    background-color: var(--github-btn-hover) !important;
+    color: #fff !important;
 }
 
-.btn-github:active {
-  background-color: #0d1117;
-  transform: scale(0.98);
+.btn-github:focus {
+    background-color: var(--github-btn-bg) !important;
+    color: #fff !important;
+    box-shadow: 0 0 0 0.25rem rgba(55, 62, 71, 0.5) !important;
 }
 
 .btn-github svg {
-  vertical-align: middle;
+    vertical-align: middle;
 }
