@@ -1,5 +1,5 @@
-console.log('Extension ID:', chrome.runtime.id);
-console.log('Redirect URI:', chrome.identity.getRedirectURL());
+//console.log('Extension ID:', chrome.runtime.id);
+//console.log('Redirect URI:', chrome.identity.getRedirectURL());
 
 
 const CONFIG = {
@@ -222,7 +222,7 @@ async function exchangeCodeForToken(code) {
     console.log('Exchanging code for token...');
     //console.log('Backend URL:', CONFIG.BACKEND_URL);
     //console.log('Code:', code);
-    console.log('Redirect URI:', CONFIG.REDIRECT_URI);
+    //console.log('Redirect URI:', CONFIG.REDIRECT_URI);
     
     const response = await fetch(`${CONFIG.BACKEND_URL}/api/github/token`, {
       method: 'POST',
@@ -332,7 +332,7 @@ async function updateUIForLoggedInUser(token) {
     const user = await fetchGitHubUser(token);
     const githubButton = document.getElementById('github');
     
-    githubButton.innerHTML = `
+    const originalContent = `
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
           class="bi bi-github me-2" viewBox="0 0 16 16">
           <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 
@@ -348,6 +348,33 @@ async function updateUIForLoggedInUser(token) {
       </svg>
       ${user.login}
     `;
+    
+    const hoverContent = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+          class="bi bi-github me-2" viewBox="0 0 16 16">
+          <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 
+          0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+          -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 
+          2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 
+          0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.12 0 0 
+          .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 
+          1.53-1.04 2.2-.82 2.2-.82.44 1.11.16 1.92.08 2.12.51.56.82 
+          1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 
+          1.48 0 1.07-.01 1.93-.01 2.19 0 .21.15.46.55.38A8.013 
+          8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      Logout from GitHub
+    `;
+    
+    githubButton.innerHTML = originalContent;
+    
+    githubButton.addEventListener('mouseenter', () => {
+      githubButton.innerHTML = hoverContent;
+    });
+    
+    githubButton.addEventListener('mouseleave', () => {
+      githubButton.innerHTML = originalContent;
+    });
     
     //Logout
     githubButton.addEventListener('click', logout);
@@ -519,7 +546,7 @@ async function showInjectedPopup() {
                 color: var(--text);
                 margin-bottom: 4px;
               ">
-                Note Title (Gist Name)
+                Filename
               </h1>
               <a href="https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax"
                 target="_blank"
@@ -549,17 +576,37 @@ async function showInjectedPopup() {
               </a>
 
             </div>
-            <input id="gistTitleInput" type="text" style="
-              width: 100%;
-              padding: 8px 10px;
-              border: 1px solid var(--input-border);
-              border-radius: 6px;
-              font-size: 13px;
-              outline: none;
-              box-sizing: border-box;
-              background-color: var(--input-bg);
-              color: var(--text);
-            "/>
+            <div style="position: relative;">
+              <select id="gistSelect" style="
+                width: 100%;
+                padding: 8px 10px;
+                border: 1px solid var(--input-border);
+                border-radius: 6px;
+                font-size: 13px;
+                outline: none;
+                box-sizing: border-box;
+                background-color: var(--input-bg);
+                color: var(--text);
+                cursor: pointer;
+              ">
+                <option value="">New file</option>
+              </select>
+              <input id="gistTitleInput" type="text" placeholder="my-notes.md" style="
+                position: relative;
+                top: 0;
+                left: 0;
+                width: 100%;
+                padding: 8px 10px;
+                border: 1px solid var(--input-border);
+                border-radius: 6px;
+                font-size: 13px;
+                outline: none;
+                box-sizing: border-box;
+                background-color: var(--input-bg);
+                color: var(--text);
+                display: none;
+              "/>
+            </div>
           </div>
 
           <textarea id="notesTextarea" placeholder="Write your notes here..." style="
@@ -592,24 +639,6 @@ async function showInjectedPopup() {
               text-decoration: none;
               margin-left: 12px;
             ">View on GitHub →</a>
-          </div>
-          
-          <div style="margin-top: 12px; background: var(--bg-soft); border-radius: 6px; padding: 8px;">
-            <label style="
-              display: flex;
-              align-items: center;
-              cursor: pointer;
-              font-size: 13px;
-              color: var(--text);
-            ">
-              <input type="checkbox" id="createNewCheckbox" style="
-                margin-right: 8px;
-                width: 16px;
-                height: 16px;
-                cursor: pointer;
-              ">
-              <span>Create a new note instead of updating the existing one.</span>
-            </label>
           </div>
         </div>
       </div>
@@ -709,8 +738,8 @@ async function showInjectedPopup() {
   const historyBtn = popup.querySelector("#historyBtn");
   const textarea = popup.querySelector("#notesTextarea");
   const gistTitleInput = popup.querySelector("#gistTitleInput");
+  const gistSelect = popup.querySelector("#gistSelect");
   const statusMessage = popup.querySelector("#statusMessage");
-  const createNewCheckbox = popup.querySelector("#createNewCheckbox");
   const gistInfo = popup.querySelector("#gistInfo");
   const lastUpdated = popup.querySelector("#lastUpdated");
   const viewGistLink = popup.querySelector("#viewGistLink");
@@ -718,11 +747,69 @@ async function showInjectedPopup() {
   const mainContent = popup.querySelector("#mainContent");
 
   let existingGist = null;
+  let allRepoGists = [];
 
   dragElement(el, header);
 
   //Load existing gist on startup
   await loadExistingGist();
+
+  // Handle gist selection from dropdown
+  gistSelect.addEventListener('change', async (e) => {
+    gistTitleInput.style.display = 'none'
+    const selectedGistId = e.target.value;
+    
+    if (!selectedGistId) {
+
+      //gistSelect.style.display = 'none';
+      gistTitleInput.style.display = 'block';
+      gistTitleInput.value = '';
+      gistTitleInput.focus();
+      
+      // Clear the form
+      textarea.value = '';
+      existingGist = null;
+      gistInfo.style.display = 'none';
+      return;
+    }
+
+    try {
+      const tokenData = await decryptTokenInContent(extensionData.githubToken);
+      const token = JSON.parse(tokenData).access_token;
+
+      // Fetch the selected gist
+      const response = await fetch(`https://api.github.com/gists/${selectedGistId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch gist');
+
+      existingGist = await response.json();
+
+      // Load the content
+      const fileKey = Object.keys(existingGist.files)[0];
+      const file = existingGist.files[fileKey];
+
+      if (!file?.content) {
+        throw new Error('Gist content missing');
+      }
+
+      textarea.value = file.content;
+
+      // Update metadata
+      const updatedDate = new Date(existingGist.updated_at);
+      lastUpdated.textContent = `Last updated ${getTimeAgo(updatedDate)}`;
+      viewGistLink.href = existingGist.html_url;
+      gistInfo.style.display = 'block';
+
+    } catch (error) {
+      console.error('Error loading selected gist:', error);
+      showStatus('Failed to load note: ' + error.message, 'error');
+    }
+  });
 
   async function loadExistingGist() {
     try {
@@ -741,12 +828,31 @@ async function showInjectedPopup() {
 
       const gists = await response.json();
 
-      const found = gists.find(g =>
-        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`) &&
-        Object.values(g.files).some(f => f.filename.endsWith('.md'))
+      // Store all gists for this repo
+      allRepoGists = gists.filter(g =>
+        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`)
       );
 
-      if (!found) return;
+      // Populate dropdown with all gists
+      gistSelect.innerHTML = '<option value="">New file</option>';
+      allRepoGists.forEach(gist => {
+        const fileKey = Object.keys(gist.files)[0];
+        const updatedDate = new Date(gist.updated_at);
+        const option = document.createElement('option');
+        option.value = gist.id;
+        option.textContent = `${fileKey} (${getTimeAgo(updatedDate)})`;
+        gistSelect.appendChild(option);
+      });
+
+      // Find the most recent one to load by default
+      const found = allRepoGists.length > 0 ? allRepoGists[0] : null;
+
+      if (!found) {
+        // No existing gists, show input for new file
+        gistSelect.style.display = 'none';
+        gistTitleInput.style.display = 'block';
+        return;
+      }
 
       //2. Fetch FULL gist (this contains file.content)
       const fullResponse = await fetch(`https://api.github.com/gists/${found.id}`, {
@@ -770,18 +876,16 @@ async function showInjectedPopup() {
 
       textarea.value = file.content;
 
-      //4. Restore title
-      const title = existingGist.description.replace(
-        `Notes for ${extensionData.selectedRepo} - `,
-        ''
-      );
-      gistTitleInput.value = title || '';
-
-      //5. Show metadata
+      //4. Show metadata
       const updatedDate = new Date(existingGist.updated_at);
       lastUpdated.textContent = `Last updated ${getTimeAgo(updatedDate)}`;
       viewGistLink.href = existingGist.html_url;
       gistInfo.style.display = 'block';
+
+      //5. Set dropdown to current gist and show dropdown
+      gistSelect.value = existingGist.id;
+      gistSelect.style.display = 'block';
+      gistTitleInput.style.display = 'none';
 
     } catch (error) {
       console.error('Error loading existing gist:', error);
@@ -802,23 +906,65 @@ async function showInjectedPopup() {
     return date.toLocaleDateString();
   }
 
+  async function refreshGistDropdown(token) {
+    try {
+      const response = await fetch('https://api.github.com/gists', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!response.ok) return;
+
+      const gists = await response.json();
+      allRepoGists = gists.filter(g =>
+        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`)
+      );
+
+      // Repopulate dropdown
+      gistSelect.innerHTML = '<option value="">New file</option>';
+      allRepoGists.forEach(gist => {
+        const fileKey = Object.keys(gist.files)[0];
+        const updatedDate = new Date(gist.updated_at);
+        const option = document.createElement('option');
+        option.value = gist.id;
+        option.textContent = `${fileKey} (${getTimeAgo(updatedDate)})`;
+        gistSelect.appendChild(option);
+      });
+
+      // Show dropdown if we have gists
+      if (allRepoGists.length > 0) {
+        gistSelect.style.display = 'block';
+        gistTitleInput.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Error refreshing dropdown:', error);
+    }
+  }
+
 
   commitBtn.addEventListener('click', async () => {
     const notes = textarea.value.trim();
-    const customTitle = gistTitleInput.value.trim();
-    const safeTitle = customTitle
-      ? customTitle.replace(/[^a-z0-9-_ ]/gi, '').replace(/\s+/g, '-').toLowerCase()
-      : extensionData.selectedRepo.replace('/', '-');
-
-    const baseName = `${safeTitle}-notes`;
-
+    
+    // Get filename from text input if visible, otherwise we're updating existing gist
+    let customTitle = '';
+    if (gistTitleInput.style.display !== 'none') {
+      customTitle = gistTitleInput.value.trim();
+    } else if (existingGist) {
+      customTitle = Object.keys(existingGist.files)[0];
+    }
     
     if (!notes) {
       showStatus('Please write some notes first!', 'error');
       return;
     }
 
-    const createNew = createNewCheckbox.checked;
+    if (!customTitle) {
+      showStatus('Please provide a file name for your note!', 'error');
+      return;
+    }
+
     commitBtn.disabled = true;
     commitBtn.innerHTML = 'Saving...';
 
@@ -826,14 +972,35 @@ async function showInjectedPopup() {
       const tokenData = await decryptTokenInContent(extensionData.githubToken);
       const token = JSON.parse(tokenData).access_token;
       
-      let timestamp = '';
+      let filename = customTitle;
+      const createNew = !existingGist;
+      
+      // If creating new, check for conflicts and add timestamp if needed
       if (createNew) {
-        timestamp = `-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
+        const filenameExists = allRepoGists.some(gist =>
+          Object.keys(gist.files).includes(filename)
+        );
+
+        if (filenameExists) {
+          const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+          const lastDotIndex = filename.lastIndexOf('.');
+          if (lastDotIndex > 0) {
+            const nameWithoutExt = filename.substring(0, lastDotIndex);
+            const extension = filename.substring(lastDotIndex);
+            filename = `${nameWithoutExt}-${timestamp}${extension}`;
+          } else {
+            filename = `${filename}-${timestamp}`;
+          }
+
+          showStatus('Filename already exists, adding timestamp...', 'info');
+        }
       }
       
-      const filename = `${baseName}${timestamp}.md`;
+      // Extract a clean description from filename (without extension)
+      const descriptionName = filename.replace(/\.[^/.]+$/, '');
 
-      if (!createNew && existingGist) {
+      if (existingGist) {
 
         const fileKey = Object.keys(existingGist.files)[0];
         const response = await fetch(`https://api.github.com/gists/${existingGist.id}`, {
@@ -844,9 +1011,10 @@ async function showInjectedPopup() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            description: `Notes for ${extensionData.selectedRepo} - ${customTitle || 'General'}`,
+            description: `Notes for ${extensionData.selectedRepo} - ${descriptionName}`,
             files: {
               [fileKey]: {
+                filename: filename,
                 content: notes
               }
             }
@@ -864,6 +1032,10 @@ async function showInjectedPopup() {
         viewGistLink.href = gist.html_url;
         gistInfo.style.display = 'block';
         
+        // Refresh the dropdown to show updated filename/timestamp
+        await refreshGistDropdown(token);
+        gistSelect.value = gist.id;
+        
         showStatus('Notes updated successfully!', 'success');
       } else {
 
@@ -875,7 +1047,7 @@ async function showInjectedPopup() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            description: `Notes for ${extensionData.selectedRepo} - ${customTitle || 'General'}`,
+            description: `Notes for ${extensionData.selectedRepo} - ${descriptionName}`,
             public: false,
             files: {
               [filename]: {
@@ -891,19 +1063,17 @@ async function showInjectedPopup() {
 
         const gist = await response.json();
         
-        if (!createNew) {
           existingGist = gist;
           const updatedDate = new Date(gist.updated_at);
           lastUpdated.textContent = `Last updated ${getTimeAgo(updatedDate)}`;
           viewGistLink.href = gist.html_url;
           gistInfo.style.display = 'block';
-        }
+          
+          // Refresh the dropdown
+          await refreshGistDropdown(token);
         
         showStatus(`New note created! <a href="${gist.html_url}" target="_blank" style="color: white; text-decoration: underline;">View Gist →</a>`, 'success');
         
-        if (createNew) {
-          createNewCheckbox.checked = false;
-        }
       }
     } catch (error) {
       console.error('Commit error:', error);
@@ -934,8 +1104,7 @@ async function showInjectedPopup() {
 
       const allGists = await response.json();
       const repoGists = allGists.filter(g =>
-        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`) &&
-        Object.values(g.files).some(f => f.filename.endsWith('.md'))
+        g.description?.startsWith(`Notes for ${extensionData.selectedRepo}`)
       );
 
 
