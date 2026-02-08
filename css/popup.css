@@ -1,0 +1,798 @@
+/* ============================================================================
+   CSS Variables for Theme Support
+   ============================================================================ */
+
+:root {
+	--bg-primary: #ffffff;
+	--bg-secondary: #f8f9fa;
+	--bg-tertiary: #e9ecef;
+	--text-primary: #212529;
+	--text-secondary: #6c757d;
+	--border-color: #dee2e6;
+	--accent-color: #667eea;
+	--accent-hover: #5568d3;
+	--success-bg: #d4edda;
+	--success-text: #155724;
+	--success-border: #c3e6cb;
+	--error-bg: #f8d7da;
+	--error-text: #721c24;
+	--error-border: #f5c6cb;
+	--info-bg: #d1ecf1;
+	--info-text: #0c5460;
+	--info-border: #bee5eb;
+	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+	--shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+	--shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] {
+	--bg-primary: #1a1a1a;
+	--bg-secondary: #2d2d2d;
+	--bg-tertiary: #3a3a3a;
+	--text-primary: #e9ecef;
+	--text-secondary: #adb5bd;
+	--border-color: #495057;
+	--accent-color: #7c8aff;
+	--accent-hover: #9099ff;
+	--success-bg: #1e4620;
+	--success-text: #a3cfbb;
+	--success-border: #2d5a31;
+	--error-bg: #4d1f1f;
+	--error-text: #f8b4b4;
+	--error-border: #6b2929;
+	--info-bg: #1a3a47;
+	--info-text: #9fd3e8;
+	--info-border: #2a5366;
+	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+	--shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+	--shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================================================
+   Global Styles
+   ============================================================================ */
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	width: 380px;
+	min-height: 400px;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+	background-color: var(--bg-primary);
+	color: var(--text-primary);
+	line-height: 1.6;
+}
+
+/* Popout mode - scale everything up */
+body.popout {
+	width: 100%;
+	min-height: 100vh;
+	margin: 0;
+	padding: 0;
+}
+
+body.popout .container {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 24px;
+}
+
+/* Scale up elements in popout mode */
+body.popout .header h2 {
+	font-size: 24px;
+}
+
+body.popout .select,
+body.popout .input,
+body.popout .textarea,
+body.popout .btn {
+	font-size: 16px;
+	padding: 12px 16px;
+}
+
+body.popout .gist-textarea {
+	min-height: 200px;
+	font-size: 15px;
+}
+
+body.popout .user-info {
+	padding: 16px;
+}
+
+body.popout .avatar {
+	width: 56px;
+	height: 56px;
+}
+
+body.popout .username {
+	font-size: 18px;
+}
+
+body.popout .tab-btn {
+	padding: 16px 20px;
+	font-size: 16px;
+}
+
+body.popout .section-label {
+	font-size: 14px;
+}
+
+body.popout .btn-icon svg {
+	width: 20px;
+	height: 20px;
+}
+
+body.popout .theme-label {
+	font-size: 14px;
+}
+
+/* Hide popout button when already in popout */
+body.popout #popoutBtn {
+	display: none;
+}
+
+/* ============================================================================
+   Container & Layout
+   ============================================================================ */
+
+.container {
+	padding: 16px;
+}
+
+.header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--border-color);
+}
+
+.header h2 {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--text-primary);
+}
+
+.header-controls {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.btn-icon {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-primary);
+	transition: color 0.2s ease;
+	border-radius: 4px;
+}
+
+.btn-icon:hover {
+	color: var(--accent-color);
+	background-color: var(--bg-tertiary);
+}
+
+.btn-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.view {
+	display: block;
+}
+
+.view.hidden {
+	display: none;
+}
+
+/* ============================================================================
+   Theme Toggle
+   ============================================================================ */
+
+.theme-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.theme-label {
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+
+.switch {
+	position: relative;
+	display: inline-block;
+	width: 44px;
+	height: 24px;
+}
+
+.switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+
+.slider {
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: var(--bg-tertiary);
+	transition: 0.3s;
+	border-radius: 24px;
+}
+
+.slider:before {
+	position: absolute;
+	content: "";
+	height: 18px;
+	width: 18px;
+	left: 3px;
+	bottom: 3px;
+	background-color: white;
+	transition: 0.3s;
+	border-radius: 50%;
+}
+
+input:checked+.slider {
+	background-color: var(--accent-color);
+}
+
+input:checked+.slider:before {
+	transform: translateX(20px);
+}
+
+/* ============================================================================
+   Login View
+   ============================================================================ */
+
+.welcome-section {
+	text-align: center;
+	padding: 40px 20px;
+}
+
+.github-logo {
+	width: 64px;
+	height: 64px;
+	margin: 0 auto 20px;
+	color: var(--text-primary);
+}
+
+.welcome-text {
+	color: var(--text-secondary);
+	margin-bottom: 24px;
+	font-size: 14px;
+}
+
+/* ============================================================================
+   Main View
+   ============================================================================ */
+
+.user-info {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px;
+	background-color: var(--bg-secondary);
+	border-radius: 8px;
+	margin-bottom: 10px;
+}
+
+.avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	border: 2px solid var(--border-color);
+}
+
+.user-details {
+	flex: 1;
+}
+
+.username {
+	font-weight: 600;
+	font-size: 14px;
+	color: var(--text-primary);
+	margin-bottom: 2px;
+}
+
+/* ============================================================================
+   Tabs
+   ============================================================================ */
+
+.tabs {
+	display: flex;
+	gap: 0;
+	border-bottom: 2px solid var(--border-color);
+	margin-bottom: 20px;
+}
+
+.tab-btn {
+	flex: 1;
+	padding: 12px 16px;
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	color: var(--text-secondary);
+	font-size: 14px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s;
+	margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+	color: var(--text-primary);
+	background-color: var(--bg-secondary);
+}
+
+.tab-btn.active {
+	color: var(--accent-color);
+	border-bottom-color: var(--accent-color);
+}
+
+.tab-content {
+	display: none;
+}
+
+.tab-content.active {
+	display: block;
+}
+
+/* ============================================================================
+   Repository Section
+   ============================================================================ */
+
+.repo-section {
+	margin-bottom: 20px;
+}
+
+.section-label {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-secondary);
+}
+
+.select {
+	width: 100%;
+	padding: 10px 12px;
+	font-size: 14px;
+	background-color: var(--bg-secondary);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	cursor: pointer;
+	transition: border-color 0.2s;
+}
+
+.select:hover {
+	border-color: var(--accent-color);
+}
+
+.select:focus {
+	outline: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn-refresh {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	justify-content: center;
+}
+
+/* ============================================================================
+   Buttons
+   ============================================================================ */
+
+.btn {
+	padding: 10px;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	align-items: center;
+	justify-content: center;
+	width: auto;
+}
+
+.btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.btn-primary {
+	background-color: var(--accent-color);
+	color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+	background-color: var(--accent-hover);
+	transform: translateY(-1px);
+	box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+	background-color: var(--bg-secondary);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover:not(:disabled) {
+	background-color: var(--bg-tertiary);
+	border-color: var(--accent-color);
+}
+
+.btn-link {
+	background: none;
+	border: none;
+	color: var(--accent-color);
+	font-size: 12px;
+	padding: 0;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.btn-link:hover {
+	text-decoration: underline;
+}
+
+/* ============================================================================
+   Quick Actions
+   ============================================================================ */
+
+.quick-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+}
+
+/* ============================================================================
+   Status Message
+   ============================================================================ */
+
+.status-message {
+	padding: 12px;
+	border-radius: 6px;
+	font-size: 13px;
+	margin-top: 16px;
+	border: 1px solid;
+}
+
+.status-message.hidden {
+	display: none;
+}
+
+.status-success {
+	background-color: var(--success-bg);
+	color: var(--success-text);
+	border-color: var(--success-border);
+}
+
+.status-error {
+	background-color: var(--error-bg);
+	color: var(--error-text);
+	border-color: var(--error-border);
+}
+
+.status-info {
+	background-color: var(--info-bg);
+	color: var(--info-text);
+	border-color: var(--info-border);
+}
+
+/* ============================================================================
+   Modal
+   ============================================================================ */
+
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+	padding: 20px;
+}
+
+.modal {
+	background-color: var(--bg-primary);
+	border-radius: 12px;
+	width: 100%;
+	max-width: 500px;
+	max-height: 80vh;
+	overflow: hidden;
+	box-shadow: var(--shadow-lg);
+	display: flex;
+	flex-direction: column;
+}
+
+.modal-header {
+	padding: 16px 20px;
+	background-color: var(--accent-color);
+	color: white;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.modal-header h3 {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.modal-close {
+	background: transparent;
+	border: none;
+	color: white;
+	font-size: 28px;
+	cursor: pointer;
+	padding: 0;
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	transition: background-color 0.2s;
+}
+
+.modal-close:hover {
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.modal-body {
+	padding: 20px;
+	overflow-y: auto;
+	flex: 1;
+}
+
+.modal-footer {
+	padding: 16px 20px;
+	border-top: 1px solid var(--border-color);
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+	flex-shrink: 0;
+}
+
+/* ============================================================================
+   Form Elements
+   ============================================================================ */
+
+.input {
+	width: 100%;
+	padding: 10px 12px;
+	font-size: 14px;
+	background-color: var(--bg-secondary);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	margin-bottom: 12px;
+	font-family: inherit;
+}
+
+.input:focus {
+	outline: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.textarea {
+	width: 100%;
+	padding: 10px 12px;
+	font-size: 14px;
+	background-color: var(--bg-secondary);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	resize: vertical;
+	font-family: inherit;
+	min-height: 120px;
+}
+
+.textarea:focus {
+	outline: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ============================================================================
+   Gists Tab
+   ============================================================================ */
+
+.gists-container {
+	display: flex;
+	flex-direction: column;
+}
+
+.gist-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.gist-input {
+	position: relative;
+	top: 0;
+	left: 0;
+	width: 100%;
+	padding: 8px 10px;
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	font-size: 13px;
+	outline: none;
+	box-sizing: border-box;
+	background-color: var(--bg-secondary);
+	color: var(--text);
+	display: none;
+}
+
+.gist-textarea {
+	width: 100%;
+	padding: 10px 12px;
+	font-size: 14px;
+	background-color: var(--bg-secondary);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	resize: vertical;
+	font-family: inherit;
+	min-height: 120px;
+	line-height: 1;
+}
+
+.gist-actions-footer {
+	display: flex;
+	gap: 10px;
+	justify-content: space-between;
+}
+
+.btn-danger {
+	background-color: #dc3545;
+	color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+	background-color: #c82333;
+	transform: translateY(-1px);
+	box-shadow: var(--shadow-md);
+}
+
+/* ============================================================================
+   Gist List (for modals)
+   ============================================================================ */
+
+.gist-item {
+	padding: 12px;
+	background-color: var(--bg-secondary);
+	border-radius: 8px;
+	border-left: 3px solid var(--accent-color);
+}
+
+.gist-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	margin-bottom: 8px;
+	gap: 12px;
+}
+
+.gist-header strong {
+	color: var(--text-primary);
+	font-size: 14px;
+	flex: 1;
+}
+
+.gist-visibility {
+	font-size: 11px;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.gist-visibility.public {
+	background-color: rgba(102, 126, 234, 0.1);
+	color: var(--accent-color);
+}
+
+.gist-visibility.private {
+	background-color: var(--bg-tertiary);
+	color: var(--text-secondary);
+}
+
+.gist-meta {
+	display: flex;
+	gap: 12px;
+	font-size: 12px;
+	color: var(--text-secondary);
+	margin-bottom: 8px;
+}
+
+.gist-files-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.file-badge {
+	font-size: 11px;
+	padding: 3px 8px;
+	background-color: var(--bg-tertiary);
+	border-radius: 4px;
+	color: var(--text-secondary);
+	font-family: 'Courier New', monospace;
+}
+
+.gist-actions {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+}
+
+.delete-gist {
+	color: #dc3545;
+}
+
+.delete-gist:hover {
+	color: #c82333;
+	text-decoration: underline;
+}
+
+.gist-date {
+	font-size: 11px;
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.empty-state {
+	text-align: center;
+	color: var(--text-secondary);
+	padding: 40px 20px;
+	font-size: 14px;
+}
+
+/* ============================================================================
+   Scrollbar
+   ============================================================================ */
+
+::-webkit-scrollbar {
+	width: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--border-color);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-secondary);
+}
