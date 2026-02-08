@@ -3,6 +3,12 @@
     "version": "0.1.0",
     "manifest_version": 3,
     "description": "Save and commit your ideas directly to GitHub repositories",
+    "icons": {
+        "16": "extension_icon16.png",
+        "48": "extension_icon48.png",
+        "128": "extension_icon128.png",
+        "512": "extension_icon512.png"
+    },
     "permissions": [
         "activeTab", 
         "scripting",
@@ -12,9 +18,10 @@
     "action": {
         "default_popup": "extension.html",
         "default_icon": {
-            "16": "extension_icon.png",
-            "48": "extension_icon.png",
-            "128": "extension_icon.png"
+            "16": "extension_icon16.png",
+            "48": "extension_icon48.png",
+            "128": "extension_icon128.png",
+            "512": "extension_icon512.png"
         }
     },
     "content_scripts": [

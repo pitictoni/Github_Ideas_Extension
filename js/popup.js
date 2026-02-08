@@ -1,7 +1,3 @@
-//console.log('Extension ID:', chrome.runtime.id);
-//console.log('Redirect URI:', chrome.identity.getRedirectURL());
-
-
 const CONFIG = {
   GITHUB_CLIENT_ID: '',
   BACKEND_URL: '',
@@ -220,9 +216,6 @@ async function authenticateWithGitHub() {
 async function exchangeCodeForToken(code) {
   try {
     console.log('Exchanging code for token...');
-    //console.log('Backend URL:', CONFIG.BACKEND_URL);
-    //console.log('Code:', code);
-    //console.log('Redirect URI:', CONFIG.REDIRECT_URI);
     
     const response = await fetch(`${CONFIG.BACKEND_URL}/api/github/token`, {
       method: 'POST',
@@ -521,7 +514,7 @@ async function showInjectedPopup() {
         font-weight: bold;
         cursor: pointer;
         color: white;
-      ">×</button>
+      ">x</button>
 
       </div>
       
@@ -534,7 +527,7 @@ async function showInjectedPopup() {
           Loading existing notes...
         </div>
         
-        <div id="mainContent" style="display: none; padding: 12px 12px 0 12px; box-sizing: border-box;">
+        <div id="mainContent" style="display: none; padding: 12px; box-sizing: border-box;">
 
           <!-- Gist Title Input -->
           <div style="margin-bottom: 10px;">
