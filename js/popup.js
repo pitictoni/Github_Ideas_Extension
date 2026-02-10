@@ -107,7 +107,7 @@ async function storeToken(tokenData) {
     const encrypted = await encryptToken(JSON.stringify(tokenData));
     await chrome.storage.local.set({
         githubToken: encrypted,
-        tokenExpiry: Date.now() + (tokenData.expires_in || 3600) * 1000
+        tokenExpiry: Date.now() + (tokenData.expires_in || 86400) * 1000
     });
 }
 
@@ -184,7 +184,7 @@ async function authenticateWithGitHub() {
                     }
 
                     const tokenData = await exchangeCodeForToken(code);
-          
+
                     resolve(tokenData);
                 } catch (error) {
                     reject(error);
@@ -318,15 +318,15 @@ async function createGist(token, repoName, title, content) {
     return await response.json();
 }
 
-async function updateGist(token, gistId, title, content) {
-    // Get the first filename from the gist
+async function updateGist(token, gistId, title, content, fileName) {
+    // Use provided filename or get the first filename from the gist
     const gist = allGists.find(g => g.id === gistId);
     if (!gist) {
         throw new Error('Gist not found');
     }
 
-    const firstFilename = Object.keys(gist.files)[0];
-    
+    const targetFilename = fileName || Object.keys(gist.files)[0];
+
     const response = await fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
         headers: {
@@ -337,7 +337,7 @@ async function updateGist(token, gistId, title, content) {
         body: JSON.stringify({
             description: title,
             files: {
-                [firstFilename]: {
+                [targetFilename]: {
                     content: content
                 }
             }
@@ -561,24 +561,26 @@ function showGistsModal(repoName, gists) {
 // State to store all gists
 let allGists = [];
 let filteredGists = [];
+let currentGistFiles = {}; // Store files of the currently selected gist
+let currentSelectedFile = null; // Store the currently selected file name
 
 // Detect if we're in a popup or popout window
 function detectPopoutMode() {
     // Check if we're in a chrome extension popup (small fixed size) or a window
-    const isPopout = window.outerWidth > 400 || 
-                     new URLSearchParams(window.location.search).get('popout') === 'true';
-    
+    const isPopout = window.outerWidth > 400 ||
+        new URLSearchParams(window.location.search).get('popout') === 'true';
+
     if (isPopout) {
         document.body.classList.add('popout');
     }
-    
+
     return isPopout;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Detect and apply popout mode
     const isPopout = detectPopoutMode();
-    
+
     // Pop-out button functionality
     const popoutBtn = document.getElementById('popoutBtn');
     if (popoutBtn && !isPopout) {
@@ -590,7 +592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 width: 600,
                 height: 800
             });
-            
+
             // Close the original popup
             window.close();
         });
@@ -744,15 +746,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Refresh the dropdown
                 await loadAllGistsToDropdown(tokenData.access_token);
 
-                // Reset UI
-                /*gistSelect.value = '';
+                // Reset form to default state
+                gistSelect.value = '';
                 gistTitleInput.value = '';
                 gistContentArea.value = '';
-                gistTitleInput.style.display = 'none';
-                document.getElementById('viewGistOnGithub').style.display = 'none';
-                document.getElementById('deleteGistBtn').style.display = 'none';
-                document.getElementById('viewGistsBtn').style.display = 'inline-flex';
-                */
+                resetUIForSelectGist();
 
             } catch (error) {
                 console.error('Error creating gist:', error);
@@ -783,11 +781,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const selectedOption = gistSelect.options[gistSelect.selectedIndex];
                 const gistTitle = selectedOption.textContent;
 
-                await updateGist(tokenData.access_token, selectedGistId, gistTitle, content);
+                await updateGist(tokenData.access_token, selectedGistId, gistTitle, content, currentSelectedFile);
                 showStatus('Note updated successfully!', 'success');
 
-                // Refresh the dropdown to get the updated content
+                // Refresh the dropdown and reload the gist content to reflect changes
                 await loadAllGistsToDropdown(tokenData.access_token);
+                
+                // Re-select the gist to show updated content
+                gistSelect.value = selectedGistId;
+                await loadGistContent(selectedGistId);
 
             } catch (error) {
                 console.error('Error updating gist:', error);
@@ -799,43 +801,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // View gists button
-    /*document.getElementById('viewGistsBtn').addEventListener('click', async () => {
-      const selectedRepo = document.getElementById('repoSelect').value;
-      if (!selectedRepo) {
-        showStatus('Please select a repository first', 'error');
-        return;
-      }
-  	
-      const btn = document.getElementById('viewGistsBtn');
-      btn.disabled = true;
-      btn.textContent = 'Loading...';
-  	
-      try {
-        const tokenData = await getStoredToken();
-        if (tokenData && tokenData.access_token) {
-          const gists = await fetchGists(tokenData.access_token, selectedRepo);
-          showGistsModal(selectedRepo, gists);
-        }
-      } catch (error) {
-        console.error('Error loading gists:', error);
-        showStatus('Failed to load notes', 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
-          </svg>
-          View Notes
-        `;
-      }
-    });*/
+
 });
 
 // Refresh gists button
 document.getElementById('refreshGistsBtn').addEventListener('click', async () => {
     const btn = document.getElementById('refreshGistsBtn');
     const originalHTML = btn.innerHTML;
+    const gistSelect = document.getElementById('gistSelect');
+    const currentlySelectedGistId = gistSelect.value;
+    
     btn.disabled = true;
     btn.innerHTML = '<span>Loading...</span>';
 
@@ -843,49 +818,130 @@ document.getElementById('refreshGistsBtn').addEventListener('click', async () =>
         const tokenData = await getStoredToken();
         if (tokenData && tokenData.access_token) {
             await loadAllGistsToDropdown(tokenData.access_token);
-            showStatus('Gists loaded successfully', 'success');
+            showStatus('Gists refreshed successfully', 'success');
+            
+            // If a gist was selected, re-select it and reload its content
+            if (currentlySelectedGistId) {
+                gistSelect.value = currentlySelectedGistId;
+                await loadGistContent(currentlySelectedGistId);
+            }
         }
     } catch (error) {
         console.error('Error loading gists:', error);
         showStatus('Failed to load gists', 'error');
     } finally {
-        document.getElementById('gistTitleInput').style.display = 'none';
-        document.getElementById('gistContentArea').value = '';
-        document.getElementById('viewGistOnGithub').style.display = 'inline-flex';
-        document.getElementById('deleteGistBtn').style.display = 'inline-flex';
         btn.disabled = false;
         btn.innerHTML = originalHTML;
     }
 });
 
-// Gist selection
+// Helper function to reset UI for "Select a gist..." option
+function resetUIForSelectGist() {
+    const filenameContainer = document.getElementById('filenameContainer');
+    const contentContainer = document.getElementById('contentContainer');
+    const actionBar = document.getElementById('actionBar');
+    const fileSelectContainer = document.getElementById('fileSelectContainer');
+    const gistContentArea = document.getElementById('gistContentArea');
+
+    filenameContainer.style.display = 'none';
+    contentContainer.style.display = 'none';
+    actionBar.style.display = 'none';
+    fileSelectContainer.style.display = 'none';
+    gistContentArea.value = '';
+    currentGistFiles = {};
+}
+
+// Helper function to reset UI for "New" option
+function resetUIForNewFile() {
+    const gistTitleInput = document.getElementById('gistTitleInput');
+    const gistContentArea = document.getElementById('gistContentArea');
+    const viewGistOnGithub = document.getElementById('viewGistOnGithub');
+    const deleteGistBtn = document.getElementById('deleteGistBtn');
+    const createGistBtn = document.getElementById('createGistBtn');
+    const createGistBtnText = document.getElementById('createGistBtnText');
+    const filenameContainer = document.getElementById('filenameContainer');
+    const contentContainer = document.getElementById('contentContainer');
+    const actionBar = document.getElementById('actionBar');
+    const fileSelectContainer = document.getElementById('fileSelectContainer');
+
+    // Show filename and content containers
+    filenameContainer.style.display = 'block';
+    contentContainer.style.display = 'block';
+    actionBar.style.display = 'flex';
+    
+    // Clear and setup inputs
+    gistTitleInput.value = '';
+    gistContentArea.value = '';
+    
+    // Hide secondary actions (view/delete), show only create
+    viewGistOnGithub.style.display = 'none';
+    deleteGistBtn.style.display = 'none';
+    createGistBtn.style.display = 'inline-flex';
+    fileSelectContainer.style.display = 'none';
+    createGistBtnText.textContent = 'Create Gist';
+    currentGistFiles = {};
+}
+
+// Helper function to reset UI for existing note editing
+function resetUIForExistingNote(gistId) {
+    const viewGistOnGithub = document.getElementById('viewGistOnGithub');
+    const deleteGistBtn = document.getElementById('deleteGistBtn');
+    const createGistBtn = document.getElementById('createGistBtn');
+    const createGistBtnText = document.getElementById('createGistBtnText');
+    const filenameContainer = document.getElementById('filenameContainer');
+    const contentContainer = document.getElementById('contentContainer');
+    const actionBar = document.getElementById('actionBar');
+    const fileSelectContainer = document.getElementById('fileSelectContainer');
+
+    // Hide filename container (not editing filename)
+    filenameContainer.style.display = 'none';
+    
+    // Show content container and action bar
+    contentContainer.style.display = 'block';
+    actionBar.style.display = 'flex';
+    fileSelectContainer.style.display = 'none'; // Will be shown by loadGistContent if multiple files
+    
+    // Show all actions for existing gist
+    viewGistOnGithub.style.display = 'inline-flex';
+    deleteGistBtn.style.display = 'inline-flex';
+    createGistBtn.style.display = 'inline-flex';
+    createGistBtnText.textContent = 'Save Changes';
+    
+    // Load and display existing gist content
+    loadGistContent(gistId);
+}
+
+// Gist selection change event
 document.getElementById('gistSelect').addEventListener('change', async (e) => {
-    const selectedGistId = e.target.value;
-    const selectedOption = e.target.options[e.target.selectedIndex];
-    const selectedText = selectedOption.textContent;
-    const createBtn = document.getElementById('createGistBtn');
+    const gistSelect = e.target;
+    const selectedGistId = gistSelect.value;
+    const selectedOption = gistSelect.options[gistSelect.selectedIndex];
+    const selectedOptionText = selectedOption.textContent;
 
-    if (!selectedGistId) {
-        // Check if "New file" was selected
-        if (selectedText === 'New file') {
-            document.getElementById('gistTitleInput').style.display = 'block';
-            document.getElementById('viewGistOnGithub').style.display = 'none';
-            document.getElementById('deleteGistBtn').style.display = 'none';
-            document.getElementById('createGistBtnText').textContent = 'Create Note';
-        } else {
-            document.getElementById('gistTitleInput').style.display = 'none';
-            document.getElementById('viewGistOnGithub').style.display = 'inline-flex';
-            document.getElementById('deleteGistBtn').style.display = 'inline-flex';
-            document.getElementById('createGistBtnText').textContent = 'Create Note';
-        }
-        document.getElementById('gistContentArea').value = '';
-
+    // "Select a gist..." option selected (empty value, not "New")
+    if (!selectedGistId && selectedOptionText !== 'New') {
+        resetUIForSelectGist();
         return;
     }
 
-    document.getElementById('gistTitleInput').style.display = 'none';
-    document.getElementById('createGistBtnText').textContent = 'Update Note';
-    await loadGistContent(selectedGistId);
+    // "New" option selected
+    if (selectedOptionText === 'New') {
+        resetUIForNewFile();
+        return;
+    }
+
+    // Existing gist selected (has gistId)
+    if (selectedGistId) {
+        resetUIForExistingNote(selectedGistId);
+    }
+});
+
+// File selection change event
+document.getElementById('fileSelect').addEventListener('change', (e) => {
+    const selectedFileName = e.target.value;
+    if (selectedFileName) {
+        loadFileContent(selectedFileName);
+    }
 });
 
 // Delete gist button
@@ -912,7 +968,7 @@ async function loadAllGistsToDropdown(token) {
     allGists = gists;
 
     const gistSelect = document.getElementById('gistSelect');
-    gistSelect.innerHTML = '<option value="">Select a gist...</option><option value="">New file</option>';
+    gistSelect.innerHTML = '<option value="">Select a gist...</option><option value="">New</option>';
 
     gists.forEach(gist => {
         const option = document.createElement('option');
@@ -950,33 +1006,56 @@ async function loadGistContent(gistId) {
         }
 
         const gist = await response.json();
-        const files = Object.values(gist.files);
+        const files = gist.files;
+        const fileNames = Object.keys(files);
+        
+        // Store files for later use
+        currentGistFiles = files;
 
-        // Display content of all files
-        let content = '';
-        if (files.length === 1) {
-            content = files[0].content;
-        } else {
-            // Multiple files - show each with a header
-            files.forEach((file, index) => {
-                content += `${'='.repeat(50)}\n`;
-                content += `File: ${file.filename}\n`;
-                content += `${'='.repeat(50)}\n\n`;
-                content += file.content;
-                if (index < files.length - 1) {
-                    content += '\n\n\n';
-                }
+        // Check if gist has multiple files
+        const fileSelectContainer = document.getElementById('fileSelectContainer');
+        const fileSelect = document.getElementById('fileSelect');
+        
+        if (fileNames.length > 1) {
+            // Multiple files - show the file dropdown
+            fileSelectContainer.style.display = 'block';
+            fileSelect.innerHTML = '';
+            
+            fileNames.forEach(fileName => {
+                const option = document.createElement('option');
+                option.value = fileName;
+                option.textContent = fileName;
+                fileSelect.appendChild(option);
             });
+            
+            // Load the first file
+            loadFileContent(fileNames[0]);
+        } else {
+            // Single file - hide the file dropdown
+            fileSelectContainer.style.display = 'none';
+            fileSelect.innerHTML = '';
+            
+            // Load the only file
+            if (fileNames.length > 0) {
+                loadFileContent(fileNames[0]);
+            }
         }
 
-        document.getElementById('gistContentArea').value = content;
         document.getElementById('viewGistOnGithub').href = gist.html_url;
         document.getElementById('viewGistOnGithub').style.display = 'inline-flex';
         document.getElementById('deleteGistBtn').style.display = 'inline-flex';
+        document.getElementById('gistContentArea').style.display = 'block';
 
     } catch (error) {
         console.error('Error loading gist content:', error);
         showStatus('Failed to load gist content', 'error');
+    }
+}
+
+// Load content of a specific file
+function loadFileContent(fileName) {
+    if (currentGistFiles[fileName]) {
+        document.getElementById('gistContentArea').value = currentGistFiles[fileName].content;
     }
 }
 
@@ -999,13 +1078,12 @@ async function deleteGistById(gistId) {
         if (response.status === 204) {
             showStatus('Gist deleted successfully', 'success');
 
-            // Clear the UI
-            document.getElementById('gistContentArea').value = '';
-            document.getElementById('viewGistOnGithub').style.display = 'none';
-            document.getElementById('deleteGistBtn').style.display = 'none';
-
             // Reload the dropdown
             await loadAllGistsToDropdown(tokenData.access_token);
+            
+            // Reset UI to default state
+            document.getElementById('gistSelect').value = '';
+            resetUIForSelectGist();
         } else {
             throw new Error('Failed to delete gist');
         }

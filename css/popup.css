@@ -59,8 +59,8 @@
 }
 
 body {
-	width: 380px;
-	min-height: 400px;
+	width: 400px;
+	height: 600px;
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 	background-color: var(--bg-primary);
 	color: var(--text-primary);
@@ -392,7 +392,7 @@ input:checked+.slider:before {
 .btn-refresh {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 10px;
 	width: 100%;
 	justify-content: center;
 }
@@ -589,7 +589,6 @@ input:checked+.slider:before {
 	color: var(--text-primary);
 	border: 1px solid var(--border-color);
 	border-radius: 6px;
-	margin-bottom: 12px;
 	font-family: inherit;
 }
 
@@ -625,59 +624,170 @@ input:checked+.slider:before {
 .gists-container {
 	display: flex;
 	flex-direction: column;
+	gap: 10px;
+}
+
+.gist-header-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.gist-select-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.gist-select-row .select {
+	flex: 1;
+}
+
+.btn-icon-refresh {
+	padding: 8px;
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-color);
+	border-radius: 6px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.2s;
+	flex-shrink: 0;
+}
+
+.btn-icon-refresh:hover {
+	background: var(--bg-secondary);
+	border-color: var(--accent-color);
+}
+
+.btn-icon-refresh svg {
+	width: 16px;
+	height: 16px;
+	color: var(--text-secondary);
 }
 
 .gist-editor {
 	display: flex;
 	flex-direction: column;
-	gap: 5px;
+	gap: 10px;
 }
 
-.gist-input {
-	position: relative;
-	top: 0;
-	left: 0;
+.editor-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.editor-section .section-label {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.editor-section .input,
+.editor-section .select {
 	width: 100%;
-	padding: 8px 10px;
+	padding: 8px 12px;
 	border: 1px solid var(--border-color);
 	border-radius: 6px;
-	font-size: 13px;
+	font-size: 14px;
+	background: var(--bg-secondary);
+	color: var(--text-primary);
+	font-family: inherit;
+}
+
+.editor-section .input:focus,
+.editor-section .select:focus {
 	outline: none;
-	box-sizing: border-box;
-	background-color: var(--bg-secondary);
-	color: var(--text);
-	display: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .gist-textarea {
 	width: 100%;
-	padding: 10px 12px;
-	font-size: 14px;
-	background-color: var(--bg-secondary);
-	color: var(--text-primary);
+	padding: 12px;
 	border: 1px solid var(--border-color);
 	border-radius: 6px;
+	font-size: 14px;
+	background: var(--bg-secondary);
+	color: var(--text-primary);
+	font-family: 'Consolas', 'Monaco', monospace;
 	resize: vertical;
-	font-family: inherit;
-	min-height: 120px;
-	line-height: 1;
+	min-height: 200px;
+	line-height: 1.5;
 }
 
-.gist-actions-footer {
+.gist-textarea:focus {
+	outline: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Action Bar */
+.action-bar {
 	display: flex;
+	gap: 8px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border-color);
+}
+
+.action-bar-left {
+	flex: 1;
+	display: flex;
+	gap: 8px;
+}
+
+.action-bar-right {
+	display: flex;
+	gap: 8px;
+}
+
+.action-bar .btn {
+	padding: 8px 16px;
+	font-size: 14px;
+	display: inline-flex;
+	align-items: center;
 	gap: 10px;
-	justify-content: space-between;
+	white-space: nowrap;
+}
+
+.action-bar .btn svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Primary button for create/update */
+.action-bar .btn-primary {
+	background: #2da44e;
+}
+
+.action-bar .btn-primary:hover:not(:disabled) {
+	background: #2c974b;
+}
+
+.gist-editor.update-mode .btn-primary {
+	background: #0969da;
+}
+
+.gist-editor.update-mode .btn-primary:hover:not(:disabled) {
+	background: #0860ca;
 }
 
 .btn-danger {
-	background-color: #dc3545;
-	color: white;
+	background-color: white;
+	color: #cf222e;
+	border: 1px solid rgba(207, 34, 46, 0.3);
 }
 
 .btn-danger:hover:not(:disabled) {
-	background-color: #c82333;
-	transform: translateY(-1px);
-	box-shadow: var(--shadow-md);
+	background-color: #ffebe9;
+	border-color: #cf222e;
+	transform: none;
+	box-shadow: none;
 }
 
 /* ============================================================================
@@ -734,7 +844,7 @@ input:checked+.slider:before {
 .gist-files-list {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 6px;
+	gap: 10px;
 	margin-bottom: 10px;
 }
 
