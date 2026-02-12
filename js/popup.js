@@ -1,4 +1,3 @@
-// Configuration
 const CONFIG = {
     GITHUB_CLIENT_ID: '',
     BACKEND_URL: '',
@@ -359,6 +358,15 @@ function showView(viewName) {
     document.getElementById('loginView').classList.add('hidden');
     document.getElementById('mainView').classList.add('hidden');
     document.getElementById(`${viewName}View`).classList.remove('hidden');
+
+    const avatarWrapper = document.getElementById('avatarWrapper');
+    if (avatarWrapper) {
+        if (viewName === 'main') {
+            avatarWrapper.style.display = 'inline-block';
+        } else {
+            avatarWrapper.style.display = 'none';
+        }
+    }
 }
 
 function showStatus(message, type = 'info') {
@@ -376,12 +384,16 @@ async function updateUIForLoggedInUser(token) {
     try {
         showView('main');
 
-        // Fetch and display user data
         const userData = await fetchGitHubUser(token);
-        document.getElementById('username').textContent = userData.login;
-        document.getElementById('userAvatar').src = userData.avatar_url;
+        const usernameEl = document.getElementById('username');
+        if (usernameEl) usernameEl.textContent = userData.login;
+        const avatarEl = document.getElementById('userAvatar');
+        if (avatarEl) {
+            avatarEl.src = userData.avatar_url;
+            const wrapper = document.getElementById('avatarWrapper');
+            if (wrapper) wrapper.style.display = 'inline-block';
+        }
 
-        // Store user data
         await chrome.storage.local.set({ userData });
 
         // Load repositories
@@ -449,10 +461,8 @@ function showCreateGistModal(repoName, token) {
 
     document.body.appendChild(modal);
 
-    // Focus title input
     document.getElementById('gistTitle').focus();
 
-    // Event listeners
     const closeModal = () => modal.remove();
 
     document.getElementById('closeModal').addEventListener('click', closeModal);
@@ -558,15 +568,12 @@ function showGistsModal(repoName, gists) {
 // Event Listeners
 // ============================================================================
 
-// State to store all gists
 let allGists = [];
 let filteredGists = [];
-let currentGistFiles = {}; // Store files of the currently selected gist
-let currentSelectedFile = null; // Store the currently selected file name
+let currentGistFiles = {};
+let currentSelectedFile = null;
 
-// Detect if we're in a popup or popout window
 function detectPopoutMode() {
-    // Check if we're in a chrome extension popup (small fixed size) or a window
     const isPopout = window.outerWidth > 400 ||
         new URLSearchParams(window.location.search).get('popout') === 'true';
 
@@ -578,10 +585,8 @@ function detectPopoutMode() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Detect and apply popout mode
     const isPopout = detectPopoutMode();
 
-    // Pop-out button functionality
     const popoutBtn = document.getElementById('popoutBtn');
     if (popoutBtn && !isPopout) {
         popoutBtn.addEventListener('click', () => {
@@ -593,7 +598,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 height: 800
             });
 
-            // Close the original popup
             window.close();
         });
     }
@@ -611,11 +615,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.addEventListener('click', async () => {
             const tabName = btn.dataset.tab;
 
-            // Update tab buttons
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
@@ -636,7 +638,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Login button
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const btn = document.getElementById('loginBtn');
         const originalText = btn.innerHTML;
@@ -658,12 +659,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Logout button
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-        await clearStoredToken();
-        showView('login');
-        showStatus('Logged out successfully', 'success');
-    });
+    const avatarEl = document.getElementById('userAvatar');
+    if (avatarEl) {
+        avatarEl.style.cursor = 'pointer';
+        avatarEl.addEventListener('click', async () => {
+            await clearStoredToken();
+            showView('login');
+            showStatus('Logged out successfully', 'success');
+        });
+    }
 
     // Repository selection
     //document.getElementById('repoSelect').addEventListener('change', async (e) => {
@@ -699,14 +703,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });*/
 
-    // Create/Update gist button
     document.getElementById('createGistBtn').addEventListener('click', async () => {
         const gistTitleInput = document.getElementById('gistTitleInput');
         const gistContentArea = document.getElementById('gistContentArea');
         const gistSelect = document.getElementById('gistSelect');
         const createBtn = document.getElementById('createGistBtn');
 
-        // Check if we're in update mode (no title input visible) or create mode
         const isUpdateMode = gistTitleInput.style.display === 'none';
         const selectedGistId = gistSelect.value;
 
@@ -716,7 +718,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (!isUpdateMode) {
-            // Create mode - title input is visible
             const filename = gistTitleInput.value.trim();
             const content = gistContentArea.value.trim();
 
@@ -743,10 +744,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await createGist(tokenData.access_token, '', filename, content);
                 showStatus('Note saved successfully!', 'success');
 
-                // Refresh the dropdown
                 await loadAllGistsToDropdown(tokenData.access_token);
 
-                // Reset form to default state
                 gistSelect.value = '';
                 gistTitleInput.value = '';
                 gistContentArea.value = '';
@@ -760,7 +759,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.getElementById('createGistBtnText').textContent = 'Create Note';
             }
         } else {
-            // Update mode
             const content = gistContentArea.value.trim();
 
             if (!content) {
@@ -784,10 +782,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await updateGist(tokenData.access_token, selectedGistId, gistTitle, content, currentSelectedFile);
                 showStatus('Note updated successfully!', 'success');
 
-                // Refresh the dropdown and reload the gist content to reflect changes
                 await loadAllGistsToDropdown(tokenData.access_token);
                 
-                // Re-select the gist to show updated content
                 gistSelect.value = selectedGistId;
                 await loadGistContent(selectedGistId);
 
@@ -804,7 +800,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 });
 
-// Refresh gists button
 document.getElementById('refreshGistsBtn').addEventListener('click', async () => {
     const btn = document.getElementById('refreshGistsBtn');
     const originalHTML = btn.innerHTML;
@@ -820,7 +815,6 @@ document.getElementById('refreshGistsBtn').addEventListener('click', async () =>
             await loadAllGistsToDropdown(tokenData.access_token);
             showStatus('Gists refreshed successfully', 'success');
             
-            // If a gist was selected, re-select it and reload its content
             if (currentlySelectedGistId) {
                 gistSelect.value = currentlySelectedGistId;
                 await loadGistContent(currentlySelectedGistId);
@@ -835,7 +829,6 @@ document.getElementById('refreshGistsBtn').addEventListener('click', async () =>
     }
 });
 
-// Helper function to reset UI for "Select a gist..." option
 function resetUIForSelectGist() {
     const filenameContainer = document.getElementById('filenameContainer');
     const contentContainer = document.getElementById('contentContainer');
@@ -849,9 +842,10 @@ function resetUIForSelectGist() {
     fileSelectContainer.style.display = 'none';
     gistContentArea.value = '';
     currentGistFiles = {};
+    const deleteFileBtn = document.getElementById('deleteFileBtn');
+    if (deleteFileBtn) deleteFileBtn.style.display = 'none';
 }
 
-// Helper function to reset UI for "New" option
 function resetUIForNewFile() {
     const gistTitleInput = document.getElementById('gistTitleInput');
     const gistContentArea = document.getElementById('gistContentArea');
@@ -864,25 +858,21 @@ function resetUIForNewFile() {
     const actionBar = document.getElementById('actionBar');
     const fileSelectContainer = document.getElementById('fileSelectContainer');
 
-    // Show filename and content containers
     filenameContainer.style.display = 'block';
     contentContainer.style.display = 'block';
     actionBar.style.display = 'flex';
-    
-    // Clear and setup inputs
     gistTitleInput.value = '';
     gistContentArea.value = '';
-    
-    // Hide secondary actions (view/delete), show only create
     viewGistOnGithub.style.display = 'none';
     deleteGistBtn.style.display = 'none';
     createGistBtn.style.display = 'inline-flex';
     fileSelectContainer.style.display = 'none';
     createGistBtnText.textContent = 'Create Gist';
     currentGistFiles = {};
+    const deleteFileBtn = document.getElementById('deleteFileBtn');
+    if (deleteFileBtn) deleteFileBtn.style.display = 'none';
 }
 
-// Helper function to reset UI for existing note editing
 function resetUIForExistingNote(gistId) {
     const viewGistOnGithub = document.getElementById('viewGistOnGithub');
     const deleteGistBtn = document.getElementById('deleteGistBtn');
@@ -893,25 +883,20 @@ function resetUIForExistingNote(gistId) {
     const actionBar = document.getElementById('actionBar');
     const fileSelectContainer = document.getElementById('fileSelectContainer');
 
-    // Hide filename container (not editing filename)
     filenameContainer.style.display = 'none';
-    
-    // Show content container and action bar
     contentContainer.style.display = 'block';
     actionBar.style.display = 'flex';
-    fileSelectContainer.style.display = 'none'; // Will be shown by loadGistContent if multiple files
-    
-    // Show all actions for existing gist
+    fileSelectContainer.style.display = 'none';
     viewGistOnGithub.style.display = 'inline-flex';
     deleteGistBtn.style.display = 'inline-flex';
     createGistBtn.style.display = 'inline-flex';
     createGistBtnText.textContent = 'Save Changes';
     
-    // Load and display existing gist content
     loadGistContent(gistId);
+    const deleteFileBtn = document.getElementById('deleteFileBtn');
+    if (deleteFileBtn) deleteFileBtn.style.display = 'none';
 }
 
-// Gist selection change event
 document.getElementById('gistSelect').addEventListener('change', async (e) => {
     const gistSelect = e.target;
     const selectedGistId = gistSelect.value;
@@ -936,15 +921,14 @@ document.getElementById('gistSelect').addEventListener('change', async (e) => {
     }
 });
 
-// File selection change event
 document.getElementById('fileSelect').addEventListener('change', (e) => {
     const selectedFileName = e.target.value;
     if (selectedFileName) {
+        currentSelectedFile = selectedFileName;
         loadFileContent(selectedFileName);
     }
 });
 
-// Delete gist button
 document.getElementById('deleteGistBtn').addEventListener('click', async () => {
     const gistSelect = document.getElementById('gistSelect');
     const selectedGistId = gistSelect.value;
@@ -956,6 +940,18 @@ document.getElementById('deleteGistBtn').addEventListener('click', async () => {
 
     if (confirm(`Are you sure you want to delete "${gistName}"?`)) {
         await deleteGistById(selectedGistId);
+    }
+});
+
+document.getElementById('deleteFileBtn').addEventListener('click', async () => {
+    const gistSelect = document.getElementById('gistSelect');
+    const selectedGistId = gistSelect.value;
+    const fileName = currentSelectedFile;
+
+    if (!selectedGistId || !fileName) return;
+
+    if (confirm(`Delete file "${fileName}" from this gist? This cannot be undone.`)) {
+        await deleteFileFromGist(selectedGistId, fileName);
     }
 });
 
@@ -1009,7 +1005,6 @@ async function loadGistContent(gistId) {
         const files = gist.files;
         const fileNames = Object.keys(files);
         
-        // Store files for later use
         currentGistFiles = files;
 
         // Check if gist has multiple files
@@ -1028,7 +1023,10 @@ async function loadGistContent(gistId) {
                 fileSelect.appendChild(option);
             });
             
-            // Load the first file
+            fileSelect.value = fileNames[0];
+            currentSelectedFile = fileNames[0];
+            const deleteFileBtn = document.getElementById('deleteFileBtn');
+            if (deleteFileBtn) deleteFileBtn.style.display = 'inline-flex';
             loadFileContent(fileNames[0]);
         } else {
             // Single file - hide the file dropdown
@@ -1037,6 +1035,9 @@ async function loadGistContent(gistId) {
             
             // Load the only file
             if (fileNames.length > 0) {
+                currentSelectedFile = fileNames[0];
+                const deleteFileBtn = document.getElementById('deleteFileBtn');
+                if (deleteFileBtn) deleteFileBtn.style.display = 'none';
                 loadFileContent(fileNames[0]);
             }
         }
@@ -1052,10 +1053,49 @@ async function loadGistContent(gistId) {
     }
 }
 
-// Load content of a specific file
 function loadFileContent(fileName) {
     if (currentGistFiles[fileName]) {
+        currentSelectedFile = fileName;
         document.getElementById('gistContentArea').value = currentGistFiles[fileName].content;
+        const deleteFileBtn = document.getElementById('deleteFileBtn');
+        if (deleteFileBtn) deleteFileBtn.style.display = Object.keys(currentGistFiles).length > 1 ? 'inline-flex' : 'none';
+    }
+}
+
+async function deleteFileFromGist(gistId, fileName) {
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${tokenData.access_token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                files: {
+                    [fileName]: null
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete file from gist');
+        }
+
+        showStatus(`File "${fileName}" deleted`, 'success');
+
+        await loadAllGistsToDropdown(tokenData.access_token);
+        document.getElementById('gistSelect').value = gistId;
+        await loadGistContent(gistId);
+    } catch (error) {
+        console.error('Error deleting file from gist:', error);
+        showStatus('Failed to delete file: ' + error.message, 'error');
     }
 }
 
@@ -1078,10 +1118,8 @@ async function deleteGistById(gistId) {
         if (response.status === 204) {
             showStatus('Gist deleted successfully', 'success');
 
-            // Reload the dropdown
             await loadAllGistsToDropdown(tokenData.access_token);
             
-            // Reset UI to default state
             document.getElementById('gistSelect').value = '';
             resetUIForSelectGist();
         } else {

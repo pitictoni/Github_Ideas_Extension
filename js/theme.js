@@ -1,5 +1,5 @@
 (function () {
-    const themeToggle = document.getElementById('themeToggle');
+    const toggleBtn = document.getElementById('themeToggleBtn');
 
     function getInitialTheme() {
         return new Promise((resolve) => {
@@ -18,18 +18,24 @@
     
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
-        themeToggle.checked = theme === 'dark';
         chrome.storage.local.set({ theme });
+        if (toggleBtn) {
+            toggleBtn.classList.remove('light', 'dark');
+            toggleBtn.classList.add(theme === 'dark' ? 'dark' : 'light');
+        }
     }
 
     getInitialTheme().then(initialTheme => {
         applyTheme(initialTheme);
     });
 
-    themeToggle.addEventListener('change', function () {
-        const newTheme = this.checked ? 'dark' : 'light';
-        applyTheme(newTheme);
-    });
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            const next = current === 'dark' ? 'light' : 'dark';
+            applyTheme(next);
+        });
+    }
 
     if (window.matchMedia) {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
