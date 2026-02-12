@@ -90,7 +90,86 @@
             </div>
 
             <!-- Projects Tab -->
+            <div id="projectsTab" class="tab-content active">
+                <div class="projects-container">
+                    <!-- Repository Selection -->
+                    <div class="project-header-section">
+                        <label for="repoSelect" class="section-label">SELECT REPOSITORY</label>
+                        <div class="select-row">
+                            <select id="repoSelect" class="select">
+                                <option value="" disabled selected>Select a repository</option>
+                            </select>
+                            <button class="btn-icon-refresh" id="refreshReposBtn" title="Refresh repositories">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+                                    <path
+                                        d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
 
+                    <!-- Project Selection -->
+                    <div id="projectSelectSection" class="project-header-section" style="display: none;">
+                        <label for="projectSelect" class="section-label">SELECT PROJECT</label>
+                        <div class="select-row">
+                            <select id="projectSelect" class="select">
+                                <option value="" disabled selected>Select a project</option>
+                            </select>
+                            <button class="btn-icon-refresh" id="refreshProjectsBtn" title="Refresh projects">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+                                    <path
+                                        d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Project Issues Table -->
+                    <div id="projectIssuesSection" class="project-issues-section" style="display: none;">
+                        <div class="project-issues-header">
+                            <h3 id="projectTitle">Project Issues</h3>
+                            <button class="btn btn-secondary btn-sm" id="viewProjectBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16"
+                                    fill="currentColor">
+                                    <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 
+                                0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                                -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 
+                                2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 
+                                0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.12 0 0 
+                                .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 
+                                1.53-1.04 2.2-.82 2.2-.82.44 1.11.16 1.92.08 2.12.51.56.82 
+                                1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 
+                                1.48 0 1.07-.01 1.93-.01 2.19 0 .21.15.46.55.38A8.013 
+                                8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+                                </svg>
+                                View on GitHub
+                            </button>
+                        </div>
+                        <div class="issues-table-container">
+                            <table class="issues-table">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="issuesTableBody">
+                                    <!-- Issues will be populated here -->
+                                </tbody>
+                            </table>
+                            <div id="emptyIssuesState" class="empty-state" style="display: none;">
+                                <p>No issues found in this project</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Gists Tab -->
             <div id="gistsTab" class="tab-content">

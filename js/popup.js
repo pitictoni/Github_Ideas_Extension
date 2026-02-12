@@ -13,6 +13,12 @@ let currentGist = null;
 let currentFile = null;
 let deleteCallback = null;
 
+// Projects state
+let allRepos = [];
+let currentRepo = null;
+let allProjects = [];
+let currentProject = null;
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -172,7 +178,7 @@ async function authenticateWithGitHub() {
     const authUrl = `https://github.com/login/oauth/authorize?` +
         `client_id=${CONFIG.GITHUB_CLIENT_ID}` +
         `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
-        `&scope=repo gist read:user` +
+        `&scope=repo gist project read:user` +
         `&state=${state}`;
 
     return new Promise((resolve, reject) => {
@@ -360,6 +366,207 @@ async function fetchGistById(token, gistId) {
     return await response.json();
 }
 
+async function fetchUserRepos(token) {
+    const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch repositories');
+    }
+
+    return await response.json();
+}
+
+async function fetchRepoProjects(token, owner, repo) {
+    const response = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/vnd.github+json"
+        },
+        body: JSON.stringify({
+            query: `
+      query {
+        repository(owner:"${owner}", name:"${repo}") {
+          projectsV2(first: 100) {
+            nodes {
+              id
+              title
+              url
+            }
+          }
+        }
+      }
+    `
+        })
+    })
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch projects');
+    }
+
+    return await response.json();
+
+
+
+}
+
+async function fetchProjectColumns(token, projectId) {
+    const response = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/vnd.github+json"
+        },
+        body: JSON.stringify({
+            query: `
+      query {
+        node(id: "${projectId}") {
+        ... on ProjectV2 {
+            id
+            title
+            url
+            shortDescription
+            public
+            closed
+            items(first: 100) {
+            nodes {
+                id
+                type
+                fieldValues(first: 20) {
+                nodes {
+                    ... on ProjectV2ItemFieldTextValue {
+                    text
+                    field {
+                        ... on ProjectV2FieldCommon {
+                        name
+                        }
+                    }
+                    }
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field {
+                        ... on ProjectV2FieldCommon {
+                        name
+                        }
+                    }
+                    }
+                }
+                }
+                content {
+                ... on Issue {
+                    id
+                    title
+                    number
+                    state
+                    url
+                    body
+                    createdAt
+                    updatedAt
+                    closedAt
+                    repository {
+                    name
+                    owner {
+                        login
+                    }
+                    }
+                    author {
+                    login
+                    }
+                    labels(first: 10) {
+                    nodes {
+                        name
+                        color
+                    }
+                    }
+                    assignees(first: 10) {
+                    nodes {
+                        login
+                        name
+                    }
+                    }
+                }
+                ... on PullRequest {
+                    id
+                    title
+                    number
+                    state
+                    url
+                    body
+                    createdAt
+                    updatedAt
+                    closedAt
+                    mergedAt
+                    repository {
+                    name
+                    owner {
+                        login
+                    }
+                    }
+                    author {
+                    login
+                    }
+                }
+                ... on DraftIssue {
+                    id
+                    title
+                    body
+                    createdAt
+                }
+                }
+            }
+            }
+        }
+        }
+    }
+
+    `
+        })
+    })
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch project columns');
+    }
+
+    return await response.json();
+}
+
+async function fetchColumnCards(token, columnId) {
+    const response = await fetch(`https://api.github.com/projects/columns/${columnId}/cards`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch column cards');
+    }
+
+    return await response.json();
+}
+
+async function fetchIssueDetails(token, issueUrl) {
+    const response = await fetch(issueUrl, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    });
+
+    if (!response.ok) {
+        return null;
+    }
+
+    return await response.json();
+}
+
 // ============================================================================
 // Modal Management
 // ============================================================================
@@ -389,17 +596,17 @@ async function loadGists() {
     }
 
     allGists = await fetchGists(tokenData.access_token);
-    
+
     const gistSelect = document.getElementById('gistSelect');
     gistSelect.innerHTML = '<option value="" disabled selected>Select a gist to view/edit</option>';
 
     allGists.forEach(gist => {
         const option = document.createElement('option');
         option.value = gist.id;
-        
+
         const firstFilename = Object.keys(gist.files)[0];
         const displayName = gist.description || firstFilename || 'Untitled Gist';
-        
+
         option.textContent = displayName;
         gistSelect.appendChild(option);
     });
@@ -407,15 +614,15 @@ async function loadGists() {
 
 function displayGistPreview(gist) {
     currentGist = gist;
-    
+
     const preview = document.getElementById('gistPreview');
     const gistName = document.getElementById('previewGistName');
     const filesList = document.getElementById('gistFilesList');
     const viewBtn = document.getElementById('viewGistBtn');
-    
+
     gistName.textContent = gist.description || Object.keys(gist.files)[0] || 'Untitled Gist';
     viewBtn.onclick = () => window.open(gist.html_url, '_blank');
-    
+
     filesList.innerHTML = '';
     Object.entries(gist.files).forEach(([filename, fileData]) => {
         const fileItem = document.createElement('div');
@@ -431,7 +638,7 @@ function displayGistPreview(gist) {
         `;
         filesList.appendChild(fileItem);
     });
-    
+
     preview.style.display = 'block';
 }
 
@@ -451,26 +658,26 @@ function openCreateGistModal() {
     document.getElementById('gistFilename').value = '';
     document.getElementById('gistContent').value = '';
     document.getElementById('gistPublic').checked = false;
-    
+
     openModal('gistEditorModal');
 }
 
 function openEditGistModal() {
     if (!currentGist) return;
-    
+
     const firstFilename = Object.keys(currentGist.files)[0];
     const firstFile = currentGist.files[firstFilename];
-    
+
     document.getElementById('gistEditorModalTitle').textContent = 'Edit Gist';
     document.getElementById('saveGistText').textContent = 'Save Changes';
     document.getElementById('gistDescription').value = currentGist.description || '';
     document.getElementById('gistFilename').value = firstFilename;
     document.getElementById('gistContent').value = firstFile.content;
     document.getElementById('gistPublic').checked = currentGist.public;
-    
+
     // Disable filename editing for existing gists
     document.getElementById('gistFilename').disabled = true;
-    
+
     openModal('gistEditorModal');
 }
 
@@ -479,27 +686,27 @@ async function saveGist() {
     const filename = document.getElementById('gistFilename').value.trim();
     const content = document.getElementById('gistContent').value.trim();
     const isPublic = document.getElementById('gistPublic').checked;
-    
+
     if (!filename) {
         showStatus('Please enter a filename', 'error');
         return;
     }
-    
+
     if (!content) {
         showStatus('Please enter some content', 'error');
         return;
     }
-    
+
     const saveBtn = document.getElementById('saveGist');
     saveBtn.disabled = true;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         if (currentGist) {
             // Update existing gist
             const files = {};
@@ -511,14 +718,14 @@ async function saveGist() {
             await createGist(tokenData.access_token, description, filename, content, isPublic);
             showStatus('Gist created successfully!', 'success');
         }
-        
+
         await loadGists();
         closeModal('gistEditorModal');
         hideGistPreview();
-        
+
         // Re-enable filename field
         document.getElementById('gistFilename').disabled = false;
-        
+
     } catch (error) {
         console.error('Error saving gist:', error);
         showStatus('Failed to save gist: ' + error.message, 'error');
@@ -533,10 +740,10 @@ async function saveGist() {
 
 function openFileEditorModal() {
     if (!currentGist) return;
-    
+
     const fileSelector = document.getElementById('fileSelector');
     const fileContent = document.getElementById('fileContent');
-    
+
     // Populate file selector
     fileSelector.innerHTML = '';
     Object.keys(currentGist.files).forEach(filename => {
@@ -545,53 +752,53 @@ function openFileEditorModal() {
         option.textContent = filename;
         fileSelector.appendChild(option);
     });
-    
+
     // Load first file
     const firstFilename = Object.keys(currentGist.files)[0];
     currentFile = firstFilename;
     document.getElementById('currentFileName').textContent = firstFilename;
     fileContent.value = currentGist.files[firstFilename].content;
-    
+
     // Show/hide delete button based on file count
-    document.getElementById('deleteFileBtn').style.display = 
+    document.getElementById('deleteFileBtn').style.display =
         Object.keys(currentGist.files).length > 1 ? 'inline-flex' : 'none';
-    
+
     openModal('fileEditorModal');
 }
 
 async function saveFileChanges() {
     if (!currentGist || !currentFile) return;
-    
+
     const content = document.getElementById('fileContent').value.trim();
-    
+
     if (!content) {
         showStatus('Content cannot be empty', 'error');
         return;
     }
-    
+
     const saveBtn = document.getElementById('saveFileChanges');
     saveBtn.disabled = true;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         const files = {};
         files[currentFile] = { content };
         await updateGist(tokenData.access_token, currentGist.id, files);
-        
+
         showStatus('File updated successfully!', 'success');
-        
+
         // Reload the gist
         currentGist = await fetchGistById(tokenData.access_token, currentGist.id);
         await loadGists();
         displayGistPreview(currentGist);
-        
+
         closeModal('fileEditorModal');
-        
+
     } catch (error) {
         console.error('Error saving file:', error);
         showStatus('Failed to save file: ' + error.message, 'error');
@@ -603,15 +810,15 @@ async function saveFileChanges() {
 function loadSelectedFile() {
     const fileSelector = document.getElementById('fileSelector');
     const selectedFilename = fileSelector.value;
-    
+
     if (!currentGist || !selectedFilename) return;
-    
+
     currentFile = selectedFilename;
     document.getElementById('currentFileName').textContent = selectedFilename;
     document.getElementById('fileContent').value = currentGist.files[selectedFilename].content;
-    
+
     // Show/hide delete button
-    document.getElementById('deleteFileBtn').style.display = 
+    document.getElementById('deleteFileBtn').style.display =
         Object.keys(currentGist.files).length > 1 ? 'inline-flex' : 'none';
 }
 
@@ -635,9 +842,9 @@ async function confirmDeleteAction() {
 
 async function deleteCurrentGist() {
     if (!currentGist) return;
-    
+
     const gistName = currentGist.description || Object.keys(currentGist.files)[0] || 'this gist';
-    
+
     openDeleteConfirmModal(
         `Are you sure you want to delete "${gistName}"? This action cannot be undone.`,
         async () => {
@@ -647,13 +854,13 @@ async function deleteCurrentGist() {
                     showStatus('Not authenticated', 'error');
                     return;
                 }
-                
+
                 await deleteGist(tokenData.access_token, currentGist.id);
                 showStatus('Gist deleted successfully!', 'success');
-                
+
                 await loadGists();
                 hideGistPreview();
-                
+
             } catch (error) {
                 console.error('Error deleting gist:', error);
                 showStatus('Failed to delete gist: ' + error.message, 'error');
@@ -668,26 +875,26 @@ async function deleteCurrentGist() {
 
 function openRenameGistModal() {
     if (!currentGist) return;
-    
+
     document.getElementById('newGistDescription').value = currentGist.description || '';
     openModal('renameGistModal');
 }
 
 async function renameGist() {
     if (!currentGist) return;
-    
+
     const newDescription = document.getElementById('newGistDescription').value.trim();
-    
+
     const renameBtn = document.getElementById('confirmRenameGist');
     renameBtn.disabled = true;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         // Update gist with new description
         const response = await fetch(`https://api.github.com/gists/${currentGist.id}`, {
             method: 'PATCH',
@@ -704,20 +911,20 @@ async function renameGist() {
         if (!response.ok) {
             throw new Error('Failed to rename gist');
         }
-        
+
         showStatus('Gist renamed successfully!', 'success');
-        
+
         // Reload the gist
         currentGist = await fetchGistById(tokenData.access_token, currentGist.id);
         await loadGists();
         displayGistPreview(currentGist);
-        
+
         // Update select to show new name
         const gistSelect = document.getElementById('gistSelect');
         gistSelect.value = currentGist.id;
-        
+
         closeModal('renameGistModal');
-        
+
     } catch (error) {
         console.error('Error renaming gist:', error);
         showStatus('Failed to rename gist: ' + error.message, 'error');
@@ -728,12 +935,12 @@ async function renameGist() {
 
 async function deleteCurrentFile() {
     if (!currentGist || !currentFile) return;
-    
+
     if (Object.keys(currentGist.files).length <= 1) {
         showStatus('Cannot delete the only file in a gist', 'error');
         return;
     }
-    
+
     openDeleteConfirmModal(
         `Are you sure you want to delete "${currentFile}"? This action cannot be undone.`,
         async () => {
@@ -743,20 +950,20 @@ async function deleteCurrentFile() {
                     showStatus('Not authenticated', 'error');
                     return;
                 }
-                
+
                 const files = {};
                 files[currentFile] = null; // Setting to null deletes the file
                 await updateGist(tokenData.access_token, currentGist.id, files);
-                
+
                 showStatus('File deleted successfully!', 'success');
-                
+
                 // Reload the gist
                 currentGist = await fetchGistById(tokenData.access_token, currentGist.id);
                 await loadGists();
                 displayGistPreview(currentGist);
-                
+
                 closeModal('fileEditorModal');
-                
+
             } catch (error) {
                 console.error('Error deleting file:', error);
                 showStatus('Failed to delete file: ' + error.message, 'error');
@@ -771,7 +978,7 @@ async function deleteCurrentFile() {
 
 function openRenameFileModal() {
     if (!currentGist || !currentFile) return;
-    
+
     document.getElementById('oldFilename').value = currentFile;
     document.getElementById('newFilename').value = currentFile;
     openModal('renameFileModal');
@@ -779,60 +986,60 @@ function openRenameFileModal() {
 
 async function renameFile() {
     if (!currentGist || !currentFile) return;
-    
+
     const newFilename = document.getElementById('newFilename').value.trim();
-    
+
     if (!newFilename) {
         showStatus('Please enter a filename', 'error');
         return;
     }
-    
+
     if (newFilename === currentFile) {
         showStatus('New filename is the same as the current filename', 'error');
         return;
     }
-    
+
     if (currentGist.files[newFilename]) {
         showStatus('A file with this name already exists', 'error');
         return;
     }
-    
+
     const renameBtn = document.getElementById('confirmRenameFile');
     renameBtn.disabled = true;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         // To rename a file in GitHub Gists:
         // 1. Create a new file with the new name and same content
         // 2. Delete the old file (set to null)
         const files = {};
-        files[newFilename] = { 
-            content: currentGist.files[currentFile].content 
+        files[newFilename] = {
+            content: currentGist.files[currentFile].content
         };
         files[currentFile] = null; // Delete old file
-        
+
         await updateGist(tokenData.access_token, currentGist.id, files);
-        
+
         showStatus('File renamed successfully!', 'success');
-        
+
         // Update current file reference
         currentFile = newFilename;
-        
+
         // Reload the gist
         currentGist = await fetchGistById(tokenData.access_token, currentGist.id);
         await loadGists();
         displayGistPreview(currentGist);
-        
+
         closeModal('renameFileModal');
-        
+
         // Update the file editor modal with new filename
         document.getElementById('currentFileName').textContent = newFilename;
-        
+
         // Reload file selector
         const fileSelector = document.getElementById('fileSelector');
         fileSelector.innerHTML = '';
@@ -845,13 +1052,185 @@ async function renameFile() {
             }
             fileSelector.appendChild(option);
         });
-        
+
     } catch (error) {
         console.error('Error renaming file:', error);
         showStatus('Failed to rename file: ' + error.message, 'error');
     } finally {
         renameBtn.disabled = false;
     }
+}
+
+// ============================================================================
+// Projects Management
+// ============================================================================
+
+async function loadRepos() {
+    const tokenData = await getStoredToken();
+    if (!tokenData || !tokenData.access_token) {
+        return;
+    }
+
+    try {
+        allRepos = await fetchUserRepos(tokenData.access_token);
+
+        const repoSelect = document.getElementById('repoSelect');
+        repoSelect.innerHTML = '<option value="" disabled selected>Select a repository</option>';
+
+        allRepos.forEach(repo => {
+            const option = document.createElement('option');
+            option.value = repo.full_name;
+            option.textContent = repo.full_name;
+            option.dataset.url = repo.html_url;
+            repoSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading repos:', error);
+        showStatus('Failed to load repositories', 'error');
+    }
+}
+
+async function loadProjects(owner, repo) {
+    const tokenData = await getStoredToken();
+    if (!tokenData || !tokenData.access_token) {
+        return;
+    }
+
+    try {
+        allProjects = await fetchRepoProjects(tokenData.access_token, owner, repo);
+
+        const projectSelect = document.getElementById('projectSelect');
+        projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
+
+        if (allProjects.length === 0) {
+            showStatus('No projects found in this repository', 'info');
+            document.getElementById('projectSelectSection').style.display = 'none';
+            return;
+        }
+
+        allProjects.data.repository.projectsV2.nodes.forEach(project => {
+            const option = document.createElement('option');
+            option.value = project.id;
+            option.textContent = project.title;
+            option.dataset.url = project.url;
+            projectSelect.appendChild(option);
+        });
+
+        document.getElementById('projectSelectSection').style.display = 'block';
+    } catch (error) {
+        console.error('Error loading projects:', error);
+        showStatus('Failed to load projects', 'error');
+    }
+}
+
+async function loadProjectIssues(projectId) {
+    const tokenData = await getStoredToken();
+    if (!tokenData || !tokenData.access_token) {
+        return;
+    }
+
+    try {
+        const project = allProjects.data.repository.projectsV2.nodes.find(p => p.id === projectId);
+        if (!project) return;
+        console.log('allProjects:', allProjects);
+
+        currentProject = project;
+        document.getElementById('projectTitle').textContent = project.title;
+
+        const viewBtn = document.getElementById('viewProjectBtn');
+        viewBtn.onclick = () => window.open(project.url, '_blank');
+
+        // Fetch all columns
+        const columns = await fetchProjectColumns(tokenData.access_token, projectId);
+        console.log('Project columns:', columns);
+
+        const allCards = [];
+
+        columns.data.node.items.nodes.forEach(item => {
+            if (item.content) {
+                // Find the "Status" field value
+                let status = 'No Status';
+                item.fieldValues.nodes.forEach(fieldValue => {
+                    if (fieldValue.field?.name === 'Status' && fieldValue.name) {
+                        status = fieldValue.name;
+                    }
+                });
+
+                allCards.push({
+                    title: item.content.title,
+                    status: status,
+                    url: item.content.url,
+                    state: item.content.state || 'open',
+                    type: item.type,
+                    labels: item.content.labels?.nodes || [],
+                    assignees: item.content.assignees?.nodes || []
+                });
+            }
+        });
+
+        console.log(`Loaded ${allCards.length} items in ONE GraphQL call!`);
+        displayProjectIssues(allCards);
+
+    } catch (error) {
+        console.error('Error loading project issues:', error);
+        showStatus('Failed to load project issues', 'error');
+    }
+}
+
+function displayProjectIssues(issues) {
+    const tableBody = document.getElementById('issuesTableBody');
+    const emptyState = document.getElementById('emptyIssuesState');
+    const issuesSection = document.getElementById('projectIssuesSection');
+
+    tableBody.innerHTML = '';
+
+    if (issues.length === 0) {
+        emptyState.style.display = 'block';
+        tableBody.parentElement.style.display = 'none';
+    } else {
+        emptyState.style.display = 'none';
+        tableBody.parentElement.style.display = 'table';
+
+        issues.forEach(issue => {
+            const row = document.createElement('tr');
+
+            // Determine status class
+            const statusLower = issue.status.toLowerCase();
+            let statusClass = 'todo';
+            if (statusLower.includes('done') || statusLower.includes('closed') || issue.state === 'closed') {
+                statusClass = 'done';
+            } else if (statusLower.includes('progress') || statusLower.includes('doing')) {
+                statusClass = 'in-progress';
+            } else if (statusLower.includes('todo') || statusLower.includes('backlog')) {
+                statusClass = 'todo';
+            } else if (issue.state === 'open') {
+                statusClass = 'open';
+            }
+
+            row.innerHTML = `
+                <td>
+                    <a href="${issue.url}" target="_blank" class="issue-title" style="text-decoration: none; color: var(--text-primary);">
+                        ${issue.title}
+                    </a>
+                </td>
+                <td>
+                    <span class="issue-status ${statusClass}">
+                        <span class="status-dot ${statusClass}"></span>
+                        ${issue.status}
+                    </span>
+                </td>
+            `;
+
+            tableBody.appendChild(row);
+        });
+    }
+
+    issuesSection.style.display = 'block';
+}
+
+function hideProjectIssues() {
+    document.getElementById('projectIssuesSection').style.display = 'none';
+    currentProject = null;
 }
 
 // ============================================================================
@@ -906,6 +1285,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             avatarWrapper.style.display = 'block';
 
             await loadGists();
+            await loadRepos();
             showStatus('Logged in successfully!', 'success');
 
         } catch (error) {
@@ -969,6 +1349,63 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (error) {
             console.error('Error refreshing gists:', error);
             showStatus('Failed to refresh gists', 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // Projects tab - Repo select
+    document.getElementById('repoSelect').addEventListener('change', async (e) => {
+        const repoFullName = e.target.value;
+        if (!repoFullName) return;
+
+        const [owner, repo] = repoFullName.split('/');
+        currentRepo = { owner, repo, fullName: repoFullName };
+
+        hideProjectIssues();
+        await loadProjects(owner, repo);
+    });
+
+    // Projects tab - Refresh repos
+    document.getElementById('refreshReposBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('refreshReposBtn');
+        btn.disabled = true;
+
+        try {
+            await loadRepos();
+            showStatus('Repositories refreshed successfully', 'success');
+        } catch (error) {
+            console.error('Error refreshing repos:', error);
+            showStatus('Failed to refresh repositories', 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // Projects tab - Project select
+    document.getElementById('projectSelect').addEventListener('change', async (e) => {
+        const projectId = e.target.value;
+        if (!projectId) {
+            hideProjectIssues();
+            return;
+        }
+
+        await loadProjectIssues(projectId);
+    });
+
+    // Projects tab - Refresh projects
+    document.getElementById('refreshProjectsBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('refreshProjectsBtn');
+        btn.disabled = true;
+
+        try {
+            if (currentRepo) {
+                await loadProjects(currentRepo.owner, currentRepo.repo);
+                showStatus('Projects refreshed successfully', 'success');
+            }
+        } catch (error) {
+            console.error('Error refreshing projects:', error);
+            showStatus('Failed to refresh projects', 'error');
         } finally {
             btn.disabled = false;
         }
@@ -1051,6 +1488,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             avatarWrapper.style.display = 'block';
 
             await loadGists();
+            await loadRepos();
 
         } catch (error) {
             console.error('Error loading user data:', error);
