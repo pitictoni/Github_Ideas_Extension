@@ -13,11 +13,9 @@ let currentGist = null;
 let currentFile = null;
 let deleteCallback = null;
 
-// Projects state
-let allRepos = [];
-let currentRepo = null;
 let allProjects = [];
 let currentProject = null;
+let projectFieldDefinitions = {};
 
 // ============================================================================
 // Utility Functions
@@ -37,6 +35,62 @@ function showStatus(message, type = 'info') {
     setTimeout(() => {
         statusEl.classList.add('hidden');
     }, 3000);
+}
+
+// Map GitHub project colors to CSS hex colors
+function githubColorToCSS(githubColor) {
+    const colorMap = {
+        'GRAY': '#6b7280',
+        'RED': '#ef4444',
+        'GREEN': '#22c55e',
+        'BLUE': '#3b82f6',
+        'YELLOW': '#eab308',
+        'PURPLE': '#a855f7',
+        'PINK': '#ec4899',
+        'ORANGE': '#f97316'
+    };
+    return colorMap[githubColor] || '#6b7280';
+}
+
+// Extract field definitions from project
+function extractFieldDefinitions(project) {
+    const fieldDefs = {
+        status: null,
+        priority: null,
+        other: []
+    };
+
+    if (!project.fields || !project.fields.nodes) {
+        return fieldDefs;
+    }
+
+    project.fields.nodes.forEach(field => {
+        // Single select fields (Status, Priority, etc.)
+        if (field.options) {
+            const fieldInfo = {
+                id: field.id,
+                name: field.name,
+                dataType: field.dataType,
+                options: field.options.map(opt => ({
+                    id: opt.id,
+                    name: opt.name,
+                    color: opt.color,
+                    description: opt.description
+                }))
+            };
+
+            // Categorize by field name
+            if (field.name.toLowerCase() === 'status') {
+                fieldDefs.status = fieldInfo;
+            } else if (field.name.toLowerCase() === 'priority') {
+                fieldDefs.priority = fieldInfo;
+            } else {
+                fieldDefs.other.push(fieldInfo);
+            }
+        }
+    });
+
+    return fieldDefs;
 }
 
 // ============================================================================
@@ -367,6 +421,197 @@ async function fetchGistById(token, gistId) {
 }
 
 async function fetchProjects(token) {
+    const query = `
+                query GetAllAccessibleProjectsWithFullDetails {
+                viewer {
+                    login
+                    name
+                    # User's personal projects with full details
+                    projectsV2(first: 50) {
+                        nodes {
+                            id
+                            title
+                            url
+                            shortDescription
+                            public
+                            closed
+                            createdAt
+                            updatedAt
+                            owner {
+                                ... on User {
+                                    login
+                                    name
+                                }
+                                ... on Organization {
+                                    login
+                                    name
+                                }
+                            }
+                            # ADD THIS: Field definitions with Status options and colors
+                            fields(first: 20) {
+                                nodes {
+                                    ... on ProjectV2Field {
+                                        id
+                                        name
+                                        dataType
+                                    }
+                                    ... on ProjectV2SingleSelectField {
+                                        id
+                                        name
+                                        dataType
+                                        options {
+                                            id
+                                            name
+                                            color
+                                            description
+                                        }
+                                    }
+                                    ... on ProjectV2IterationField {
+                                        id
+                                        name
+                                        dataType
+                                        configuration {
+                                            iterations {
+                                                id
+                                                title
+                                                startDate
+                                                duration
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            items(first: 100) {
+                                totalCount
+                                nodes {
+                                    id
+                                    type
+                                    fieldValues(first: 20) {
+                                        nodes {
+                                            ... on ProjectV2ItemFieldTextValue {
+                                                text
+                                                field {
+                                                    ... on ProjectV2FieldCommon {
+                                                        name
+                                                    }
+                                                }
+                                            }
+                                            ... on ProjectV2ItemFieldNumberValue {
+                                                number
+                                                field {
+                                                    ... on ProjectV2FieldCommon {
+                                                        name
+                                                    }
+                                                }
+                                            }
+                                            ... on ProjectV2ItemFieldDateValue {
+                                                date
+                                                field {
+                                                    ... on ProjectV2FieldCommon {
+                                                        name
+                                                    }
+                                                }
+                                            }
+                                            ... on ProjectV2ItemFieldSingleSelectValue {
+                                                name
+                                                color
+                                                # ADD THIS: optionId to match with field definitions
+                                                optionId
+                                                field {
+                                                    ... on ProjectV2FieldCommon {
+                                                        name
+                                                    }
+                                                }
+                                            }
+                                            ... on ProjectV2ItemFieldIterationValue {
+                                                title
+                                                startDate
+                                                duration
+                                                field {
+                                                    ... on ProjectV2FieldCommon {
+                                                        name
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    content {
+                                        ... on Issue {
+                                            id
+                                            title
+                                            number
+                                            state
+                                            url
+                                            body
+                                            createdAt
+                                            updatedAt
+                                            closedAt
+                                            repository {
+                                                name
+                                                nameWithOwner
+                                                owner {
+                                                    login
+                                                }
+                                            }
+                                            author {
+                                                login
+                                                avatarUrl
+                                            }
+                                            labels(first: 10) {
+                                                nodes {
+                                                    name
+                                                    color
+                                                }
+                                            }
+                                            assignees(first: 10) {
+                                                nodes {
+                                                    login
+                                                    name
+                                                    avatarUrl
+                                                }
+                                            }
+                                            milestone {
+                                                title
+                                                dueOn
+                                            }
+                                        }
+                                        ... on PullRequest {
+                                            id
+                                            title
+                                            number
+                                            state
+                                            url
+                                            body
+                                            createdAt
+                                            updatedAt
+                                            closedAt
+                                            mergedAt
+                                            repository {
+                                                name
+                                                nameWithOwner
+                                                owner {
+                                                    login
+                                                }
+                                            }
+                                            author {
+                                                login
+                                                avatarUrl
+                                            }
+                                        }
+                                        ... on DraftIssue {
+                                            id
+                                            title
+                                            body
+                                            createdAt
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `;
     const response = await fetch("https://api.github.com/graphql", {
         method: "POST",
         headers: {
@@ -375,197 +620,12 @@ async function fetchProjects(token) {
             "Accept": "application/vnd.github+json"
         },
         body: JSON.stringify({
-            query: `
-                query GetAllAccessibleProjectsWithFullDetails {
-                viewer {
-                login
-                name
-                # User's personal projects with full details
-                projectsV2(first: 50) {
-                    nodes {
-                    id
-                    title
-                    url
-                    shortDescription
-                    public
-                    closed
-                    createdAt
-                    updatedAt
-                    owner {
-                        ... on User {
-                        login
-                        name
-                        }
-                        ... on Organization {
-                        login
-                        name
-                        }
-                    }
-                    items(first: 100) {
-                        totalCount
-                        nodes {
-                        id
-                        type
-                        fieldValues(first: 20) {
-                            nodes {
-                            ... on ProjectV2ItemFieldTextValue {
-                                text
-                                field {
-                                ... on ProjectV2FieldCommon {
-                                    name
-                                }
-                                }
-                            }
-                            ... on ProjectV2ItemFieldNumberValue {
-                                number
-                                field {
-                                ... on ProjectV2FieldCommon {
-                                    name
-                                }
-                                }
-                            }
-                            ... on ProjectV2ItemFieldDateValue {
-                                date
-                                field {
-                                ... on ProjectV2FieldCommon {
-                                    name
-                                }
-                                }
-                            }
-                            ... on ProjectV2ItemFieldSingleSelectValue {
-                                name
-                                color
-                                field {
-                                ... on ProjectV2FieldCommon {
-                                    name
-                                }
-                                }
-                            }
-                            ... on ProjectV2ItemFieldIterationValue {
-                                title
-                                startDate
-                                duration
-                                field {
-                                ... on ProjectV2FieldCommon {
-                                    name
-                                }
-                                }
-                            }
-                            }
-                        }
-                        content {
-                            ... on Issue {
-                            id
-                            title
-                            number
-                            state
-                            url
-                            body
-                            createdAt
-                            updatedAt
-                            closedAt
-                            repository {
-                                name
-                                nameWithOwner
-                                owner {
-                                login
-                                }
-                            }
-                            author {
-                                login
-                                avatarUrl
-                            }
-                            labels(first: 10) {
-                                nodes {
-                                name
-                                color
-                                }
-                            }
-                            assignees(first: 10) {
-                                nodes {
-                                login
-                                name
-                                avatarUrl
-                                }
-                            }
-                            milestone {
-                                title
-                                dueOn
-                            }
-                            }
-                            ... on PullRequest {
-                            id
-                            title
-                            number
-                            state
-                            url
-                            body
-                            createdAt
-                            updatedAt
-                            closedAt
-                            mergedAt
-                            repository {
-                                name
-                                nameWithOwner
-                                owner {
-                                login
-                                }
-                            }
-                            author {
-                                login
-                                avatarUrl
-                            }
-                            }
-                            ... on DraftIssue {
-                            id
-                            title
-                            body
-                            createdAt
-                            }
-                        }
-                        }
-                    }
-                    }
-                }
-                }
-            }
-
-        `
+            query: query
         })
     })
 
     if (!response.ok) {
         throw new Error('Failed to fetch project columns');
-    }
-
-    return await response.json();
-}
-
-async function fetchColumnCards(token, columnId) {
-    const response = await fetch(`https://api.github.com/projects/columns/${columnId}/cards`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/vnd.github+json'
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to fetch column cards');
-    }
-
-    return await response.json();
-}
-
-async function fetchIssueDetails(token, issueUrl) {
-    const response = await fetch(issueUrl, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    });
-
-    if (!response.ok) {
-        return null;
     }
 
     return await response.json();
@@ -1077,7 +1137,6 @@ async function loadProjects() {
 
     try {
         allProjects = await fetchProjects(tokenData.access_token);
-        console.log('loadProjects:', allProjects);
 
         const projectSelect = document.getElementById('projectSelect');
         projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
@@ -1088,6 +1147,9 @@ async function loadProjects() {
         }
 
         allProjects.data.viewer.projectsV2.nodes.forEach(project => {
+            // Extract and store field definitions for each project
+            projectFieldDefinitions[project.id] = extractFieldDefinitions(project);
+            
             const option = document.createElement('option');
             option.value = project.id;
             option.textContent = project.title;
@@ -1122,22 +1184,28 @@ async function loadProjectIssues(projectId) {
 
         columns.nodes.forEach(item => {
             if (item.content) {
-                // Find the "Status" field value
-                let status = 'No Status';
+                // Find the "Status" field value with color
+                let statusName = 'No Status';
+                let statusColor = null;
+                
                 item.fieldValues.nodes.forEach(fieldValue => {
                     if (fieldValue.field?.name === 'Status' && fieldValue.name) {
-                        status = fieldValue.name;
+                        statusName = fieldValue.name;
+                        statusColor = fieldValue.color;
                     }
                 });
 
                 allCards.push({
+                    itemId: item.id,
                     title: item.content.title,
-                    status: status,
+                    status: statusName,
+                    statusColor: statusColor,
                     url: item.content.url,
                     state: item.content.state || 'open',
                     type: item.type,
                     labels: item.content.labels?.nodes || [],
-                    assignees: item.content.assignees?.nodes || []
+                    assignees: item.content.assignees?.nodes || [],
+                    repository: item.content.repository?.nameWithOwner || 'Unknown'
                 });
             }
         });
@@ -1167,34 +1235,83 @@ function displayProjectIssues(issues) {
         issues.forEach(issue => {
             const row = document.createElement('tr');
 
-            // Determine status class
-            const statusLower = issue.status.toLowerCase();
-            let statusClass = 'todo';
-            if (statusLower.includes('done') || statusLower.includes('closed') || issue.state === 'closed') {
-                statusClass = 'done';
-            } else if (statusLower.includes('progress') || statusLower.includes('doing')) {
-                statusClass = 'in-progress';
-            } else if (statusLower.includes('todo') || statusLower.includes('backlog')) {
-                statusClass = 'todo';
-            } else if (issue.state === 'open') {
-                statusClass = 'open';
-            }
+            // Convert GitHub color enum to CSS hex color
+            const cssColor = issue.statusColor 
+                ? githubColorToCSS(issue.statusColor) 
+                : '#6b7280'; // Default gray
 
-            row.innerHTML = `
+            const statusBadge = `
+                <span class="issue-status clickable-status" style="
+                    background-color: ${cssColor}15;
+                    color: ${cssColor};
+                    border: 1px solid ${cssColor}30;
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    position: relative;
+                " data-item-id="${issue.itemId}" data-current-status="${issue.status}" title="Click to change status">
+                    <span style="
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 50%;
+                        background-color: ${cssColor};
+                        display: inline-block;
+                    "></span>
+                    ${issue.status}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                    </svg>
+                </span>
+            `;
+
+            if (issue.type === 'DRAFT_ISSUE') {
+                row.innerHTML = `
                 <td>
-                    <a href="${issue.url}" target="_blank" class="issue-title" style="text-decoration: none; color: var(--text-primary);">
+                    <a class="issue-title" style="text-decoration: none; color: var(--text-primary);">
                         ${issue.title}
                     </a>
                 </td>
                 <td>
-                    <span class="issue-status ${statusClass}">
-                        <span class="status-dot ${statusClass}"></span>
-                        ${issue.status}
-                    </span>
+                    ${statusBadge}
                 </td>
             `;
+            } else {
+                row.innerHTML = `
+                <td>
+                    <a href="${issue.url}" target="_blank" class="issue-title" style="text-decoration: none; color: var(--text-primary);">
+                        ${issue.title}
+                    </a>
+                    ${issue.repository ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${issue.repository}</div>` : ''}
+                </td>
+                <td>
+                    ${statusBadge}
+                </td>
+            `;
+            }
 
             tableBody.appendChild(row);
+        });
+
+        document.querySelectorAll('.clickable-status').forEach(badge => {
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const itemId = e.currentTarget.getAttribute('data-item-id');
+                const currentStatus = e.currentTarget.getAttribute('data-current-status');
+                showStatusDropdown(e.currentTarget, itemId, currentStatus);
+            });
+
+            badge.addEventListener('mouseenter', (e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+            });
+            badge.addEventListener('mouseleave', (e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+            });
         });
     }
 
@@ -1204,6 +1321,231 @@ function displayProjectIssues(issues) {
 function hideProjectIssues() {
     document.getElementById('projectIssuesSection').style.display = 'none';
     currentProject = null;
+}
+
+// ============================================================================
+// Status Change Dropdown
+// ============================================================================
+
+let currentStatusDropdown = null;
+
+function showStatusDropdown(badgeElement, itemId, currentStatus) {
+    hideStatusDropdown();
+
+    if (!currentProject || !projectFieldDefinitions[currentProject.id]) {
+        showStatus('Project field definitions not loaded', 'error');
+        return;
+    }
+
+    const fieldDefs = projectFieldDefinitions[currentProject.id];
+
+    if (!fieldDefs.status || !fieldDefs.status.options) {
+        showStatus('No status field found in this project', 'error');
+        return;
+    }
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'status-dropdown';
+    dropdown.id = 'statusDropdown';
+
+    fieldDefs.status.options.forEach(option => {
+        const cssColor = githubColorToCSS(option.color);
+        const isSelected = option.name === currentStatus;
+
+        const optionDiv = document.createElement('div');
+        optionDiv.className = 'status-dropdown-option';
+        if (isSelected) {
+            optionDiv.classList.add('selected');
+        }
+
+        optionDiv.innerHTML = `
+            <span style="
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background-color: ${cssColor};
+                display: inline-block;
+            "></span>
+            <span style="flex: 1;">${option.name}</span>
+            ${isSelected ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/></svg>' : ''}
+        `;
+
+        optionDiv.style.color = cssColor;
+
+        if (!isSelected) {
+            optionDiv.addEventListener('click', async () => {
+                await updateItemStatusDirect(itemId, option.id, option.name, option.color);
+                hideStatusDropdown();
+            });
+        }
+
+        dropdown.appendChild(optionDiv);
+    });
+
+    document.body.appendChild(dropdown);
+    
+    const badgeRect = badgeElement.getBoundingClientRect();
+    const container = document.querySelector('.container');
+    const containerRect = container.getBoundingClientRect();
+    
+    dropdown.style.position = 'fixed';
+    dropdown.style.zIndex = '10000';
+    
+    let top = badgeRect.bottom + 4;
+    let left = badgeRect.left;
+    
+    // Wait for dropdown to render to get its dimensions
+    setTimeout(() => {
+        const dropdownRect = dropdown.getBoundingClientRect();
+        
+        // Check if dropdown would go off the right edge
+        if (left + dropdownRect.width > containerRect.right) {
+            left = containerRect.right - dropdownRect.width - 8;
+        }
+        
+        // Make sure it doesn't go off the left edge
+        if (left < containerRect.left) {
+            left = containerRect.left + 8;
+        }
+        
+        // Check if dropdown would go off the bottom
+        if (top + dropdownRect.height > containerRect.bottom) {
+            // Show above the badge instead
+            top = badgeRect.top - dropdownRect.height - 4;
+        }
+        
+        // Make sure it doesn't go off the top
+        if (top < containerRect.top) {
+            // If it doesn't fit above or below, position it at the top with max height
+            top = containerRect.top + 8;
+            dropdown.style.maxHeight = `${containerRect.height - 16}px`;
+            dropdown.style.overflowY = 'auto';
+        }
+        
+        dropdown.style.top = `${top}px`;
+        dropdown.style.left = `${left}px`;
+    }, 0);
+
+    currentStatusDropdown = dropdown;
+
+    setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+    }, 0);
+}
+
+function hideStatusDropdown() {
+    if (currentStatusDropdown) {
+        currentStatusDropdown.remove();
+        currentStatusDropdown = null;
+        document.removeEventListener('click', handleClickOutside);
+    }
+}
+
+function handleClickOutside(e) {
+    if (currentStatusDropdown && !currentStatusDropdown.contains(e.target)) {
+        hideStatusDropdown();
+    }
+}
+
+async function updateItemStatusDirect(itemId, optionId, optionName, optionColor) {
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        const fieldDefs = projectFieldDefinitions[currentProject.id];
+        const statusFieldId = fieldDefs.status.id;
+
+        const query = `
+            mutation UpdateItemStatus($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(
+                    input: {
+                        projectId: $projectId
+                        itemId: $itemId
+                        fieldId: $fieldId
+                        value: { 
+                            singleSelectOptionId: $optionId
+                        }
+                    }
+                ) {
+                    projectV2Item {
+                        id
+                    }
+                }
+            }
+        `;
+
+        const response = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: query,
+                variables: {
+                    projectId: currentProject.id,
+                    itemId: itemId,
+                    fieldId: statusFieldId,
+                    optionId: optionId
+                }
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+
+        const badge = document.querySelector(`[data-item-id="${itemId}"]`);
+        if (badge) {
+            const cssColor = githubColorToCSS(optionColor);
+            
+            badge.style.backgroundColor = `${cssColor}15`;
+            badge.style.color = cssColor;
+            badge.style.borderColor = `${cssColor}30`;
+            badge.setAttribute('data-current-status', optionName);
+            
+            badge.innerHTML = `
+                <span style="
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    background-color: ${cssColor};
+                    display: inline-block;
+                "></span>
+                ${optionName}
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                </svg>
+            `;
+            
+            // Re-attach event listener
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const itemId = e.currentTarget.getAttribute('data-item-id');
+                const currentStatus = e.currentTarget.getAttribute('data-current-status');
+                showStatusDropdown(e.currentTarget, itemId, currentStatus);
+            });
+
+            badge.addEventListener('mouseenter', (e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+            });
+            badge.addEventListener('mouseleave', (e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+            });
+        }
+
+        showStatus(`Status changed to "${optionName}"`, 'success');
+
+    } catch (error) {
+        console.error('Error updating status:', error);
+        showStatus('Failed to update status: ' + error.message, 'error');
+    }
 }
 
 // ============================================================================
@@ -1366,8 +1708,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Rename gist button
     document.getElementById('renameGistBtn').addEventListener('click', openRenameGistModal);
-
-    // View gist button (already handled in displayGistPreview)
 
     // Delete gist button
     document.getElementById('deleteGistBtn').addEventListener('click', deleteCurrentGist);
