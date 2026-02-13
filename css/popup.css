@@ -796,12 +796,13 @@ input:checked+.slider:before {
 }
 
 .project-issues-header {
-	padding: 16px;
+	padding: 3%;
 	border-bottom: 1px solid var(--border-color);
-	display: flex;
 	justify-content: space-between;
 	align-items: center;
 	gap: 12px;
+    display: grid;
+    flex-wrap: wrap;
 }
 
 .project-issues-header h3 {
@@ -835,7 +836,6 @@ input:checked+.slider:before {
 	padding: 12px;
 	font-weight: 600;
 	color: var(--text-secondary);
-	text-transform: uppercase;
 	font-size: 12px;
 	letter-spacing: 0.5px;
 	border-bottom: 2px solid var(--border-color);
@@ -907,6 +907,12 @@ input:checked+.slider:before {
 	justify-content: space-between;
 }
 
+.project-select-actions {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+}
+
 .btn-icon-refresh {
 	padding: 10px;
 	background-color: var(--bg-secondary);
@@ -936,7 +942,17 @@ input:checked+.slider:before {
 	gap: 10px;
 }
 
+.project-quick-actions {
+	display: flex;
+	gap: 10px;
+}
+
 .gist-quick-actions .btn {
+	flex: 1;
+	padding: 5px;
+}
+
+.project-quick-actions .btn {
 	flex: 1;
 	padding: 5px;
 }
@@ -952,7 +968,7 @@ input:checked+.slider:before {
 .gist-preview-header {
 	padding: 3%;
 	border-bottom: 1px solid var(--border-color);
-	display: flex;
+	display: grid;
 	justify-content: space-between;
 	align-items: center;
 	gap: 12px;
@@ -969,6 +985,12 @@ input:checked+.slider:before {
 }
 
 .gist-preview-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.project-preview-actions {
 	display: flex;
 	gap: 8px;
 	flex-wrap: wrap;
@@ -1045,7 +1067,6 @@ input:checked+.slider:before {
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--text-secondary);
-	text-transform: uppercase;
 	letter-spacing: 0.5px;
 }
 

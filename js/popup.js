@@ -16,6 +16,7 @@ let deleteCallback = null;
 let allProjects = [];
 let currentProject = null;
 let projectFieldDefinitions = {};
+let userRepositories = [];
 
 // ============================================================================
 // Utility Functions
@@ -56,7 +57,6 @@ function githubColorToCSS(githubColor) {
 function extractFieldDefinitions(project) {
     const fieldDefs = {
         status: null,
-        priority: null,
         other: []
     };
 
@@ -65,7 +65,7 @@ function extractFieldDefinitions(project) {
     }
 
     project.fields.nodes.forEach(field => {
-        // Single select fields (Status, Priority, etc.)
+        // Single select fields (Status, etc.)
         if (field.options) {
             const fieldInfo = {
                 id: field.id,
@@ -82,8 +82,6 @@ function extractFieldDefinitions(project) {
             // Categorize by field name
             if (field.name.toLowerCase() === 'status') {
                 fieldDefs.status = fieldInfo;
-            } else if (field.name.toLowerCase() === 'priority') {
-                fieldDefs.priority = fieldInfo;
             } else {
                 fieldDefs.other.push(fieldInfo);
             }
@@ -1549,6 +1547,326 @@ async function updateItemStatusDirect(itemId, optionId, optionName, optionColor)
 }
 
 // ============================================================================
+// Project Rename and Delete
+// ============================================================================
+
+async function fetchUserRepositories(token) {
+    const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch repositories');
+    }
+
+    return await response.json();
+}
+
+async function openAddIssueModal() {
+    if (!currentProject) return;
+    
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+        
+        if (userRepositories.length === 0) {
+            showStatus('Loading repositories...', 'info');
+            userRepositories = await fetchUserRepositories(tokenData.access_token);
+        }
+        
+        const repoSelect = document.getElementById('issueRepository');
+        repoSelect.innerHTML = '<option value="" disabled selected>Select a repository</option>';
+        
+        userRepositories.forEach(repo => {
+            const option = document.createElement('option');
+            option.value = repo.full_name;
+            option.textContent = repo.full_name;
+            option.dataset.owner = repo.owner.login;
+            option.dataset.name = repo.name;
+            repoSelect.appendChild(option);
+        });
+        
+        document.getElementById('issueTitle').value = '';
+        document.getElementById('issueBody').value = '';
+        
+        openModal('addIssueModal');
+        
+    } catch (error) {
+        console.error('Error opening add issue modal:', error);
+        showStatus('Failed to load repositories: ' + error.message, 'error');
+    }
+}
+
+async function addIssueToProject() {
+    const repoSelect = document.getElementById('issueRepository');
+    const selectedOption = repoSelect.options[repoSelect.selectedIndex];
+    const title = document.getElementById('issueTitle').value.trim();
+    const body = document.getElementById('issueBody').value.trim();
+    
+    if (!selectedOption || !selectedOption.value) {
+        showStatus('Please select a repository', 'error');
+        return;
+    }
+    
+    if (!title) {
+        showStatus('Please enter an issue title', 'error');
+        return;
+    }
+    
+    const confirmBtn = document.getElementById('confirmAddIssue');
+    confirmBtn.disabled = true;
+    
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+        
+        const owner = selectedOption.dataset.owner;
+        const repoName = selectedOption.dataset.name;
+        
+        // Create the issue in the repository
+        const createIssueResponse = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${tokenData.access_token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                title: title,
+                body: body || undefined
+            })
+        });
+        
+        if (!createIssueResponse.ok) {
+            const errorData = await createIssueResponse.json();
+            throw new Error(errorData.message || 'Failed to create issue');
+        }
+        
+        const createdIssue = await createIssueResponse.json();
+        
+        // Add the issue to the project
+        const query = `
+            mutation AddProjectV2Item($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: {
+                    projectId: $projectId
+                    contentId: $contentId
+                }) {
+                    item {
+                        id
+                    }
+                }
+            }
+        `;
+        
+        const graphqlResponse = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: query,
+                variables: {
+                    projectId: currentProject.id,
+                    contentId: createdIssue.node_id
+                }
+            })
+        });
+        
+        const result = await graphqlResponse.json();
+        
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+        
+        showStatus('Issue added to project successfully!', 'success');
+        closeModal('addIssueModal');
+        
+        await loadProjectIssues(currentProject.id);
+        
+    } catch (error) {
+        console.error('Error adding issue to project:', error);
+        showStatus('Failed to add issue: ' + error.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
+}
+
+function openRenameProjectModal() {
+    if (!currentProject) return;
+    
+    document.getElementById('newProjectTitle').value = currentProject.title;
+    openModal('renameProjectModal');
+}
+
+async function renameProject() {
+    if (!currentProject) return;
+    
+    const newTitle = document.getElementById('newProjectTitle').value.trim();
+    
+    if (!newTitle) {
+        showStatus('Please enter a project title', 'error');
+        return;
+    }
+    
+    const renameBtn = document.getElementById('confirmRenameProject');
+    renameBtn.disabled = true;
+    
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+        
+        const query = `
+            mutation UpdateProject($projectId: ID!, $title: String!) {
+                updateProjectV2(
+                    input: {
+                        projectId: $projectId
+                        title: $title
+                    }
+                ) {
+                    projectV2 {
+                        id
+                        title
+                    }
+                }
+            }
+        `;
+        
+        const response = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: query,
+                variables: {
+                    projectId: currentProject.id,
+                    title: newTitle
+                }
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+        
+        showStatus('Project renamed successfully', 'success');
+        
+        currentProject.title = newTitle;
+        document.getElementById('projectTitle').textContent = newTitle;
+        
+        const projectSelect = document.getElementById('projectSelect');
+        const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
+        if (selectedOption) {
+            selectedOption.textContent = newTitle;
+        }
+        
+        const projectIndex = allProjects.data.viewer.projectsV2.nodes.findIndex(p => p.id === currentProject.id);
+        if (projectIndex !== -1) {
+            allProjects.data.viewer.projectsV2.nodes[projectIndex].title = newTitle;
+        }
+        
+        closeModal('renameProjectModal');
+        
+    } catch (error) {
+        console.error('Error renaming project:', error);
+        showStatus('Failed to rename project: ' + error.message, 'error');
+    } finally {
+        renameBtn.disabled = false;
+    }
+}
+
+async function deleteCurrentProject() {
+    if (!currentProject) return;
+    
+    deleteCallback = async () => {
+        try {
+            const tokenData = await getStoredToken();
+            if (!tokenData || !tokenData.access_token) {
+                showStatus('Not authenticated', 'error');
+                return;
+            }
+            
+            const query = `
+                mutation DeleteProject($projectId: ID!) {
+                    deleteProjectV2(
+                        input: {
+                            projectId: $projectId
+                        }
+                    ) {
+                        projectV2 {
+                            id
+                        }
+                    }
+                }
+            `;
+            
+            const response = await fetch("https://api.github.com/graphql", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${tokenData.access_token}`,
+                },
+                body: JSON.stringify({
+                    query: query,
+                    variables: {
+                        projectId: currentProject.id
+                    }
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.errors) {
+                console.error('GraphQL Error:', result.errors);
+                throw new Error(result.errors[0].message);
+            }
+            
+            showStatus('Project deleted successfully', 'success');
+            
+            const projectIndex = allProjects.data.viewer.projectsV2.nodes.findIndex(p => p.id === currentProject.id);
+            if (projectIndex !== -1) {
+                allProjects.data.viewer.projectsV2.nodes.splice(projectIndex, 1);
+            }
+            
+            const projectSelect = document.getElementById('projectSelect');
+            const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
+            if (selectedOption) {
+                selectedOption.remove();
+            }
+            
+            projectSelect.value = '';
+            hideProjectIssues();
+            
+        } catch (error) {
+            console.error('Error deleting project:', error);
+            showStatus('Failed to delete project: ' + error.message, 'error');
+        }
+    };
+    
+    document.getElementById('deleteConfirmMessage').textContent = 
+        `Are you sure you want to delete the project "${currentProject.title}"? This action cannot be undone.`;
+    openModal('deleteConfirmModal');
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
@@ -1745,6 +2063,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeRenameFileModal').addEventListener('click', () => closeModal('renameFileModal'));
     document.getElementById('cancelRenameFile').addEventListener('click', () => closeModal('renameFileModal'));
     document.getElementById('confirmRenameFile').addEventListener('click', renameFile);
+
+    // Rename project modal
+    document.getElementById('closeRenameProjectModal').addEventListener('click', () => closeModal('renameProjectModal'));
+    document.getElementById('cancelRenameProject').addEventListener('click', () => closeModal('renameProjectModal'));
+    document.getElementById('confirmRenameProject').addEventListener('click', renameProject);
+
+    // Add issue modal
+    document.getElementById('closeAddIssueModal').addEventListener('click', () => closeModal('addIssueModal'));
+    document.getElementById('cancelAddIssue').addEventListener('click', () => closeModal('addIssueModal'));
+    document.getElementById('confirmAddIssue').addEventListener('click', addIssueToProject);
+
+    // Project actions
+    document.getElementById('addIssueBtn').addEventListener('click', openAddIssueModal);
+    document.getElementById('renameProjectBtn').addEventListener('click', openRenameProjectModal);
+    document.getElementById('deleteProjectBtn').addEventListener('click', deleteCurrentProject);
 
     // Close modals on overlay click
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
