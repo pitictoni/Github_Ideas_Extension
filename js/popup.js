@@ -366,22 +366,7 @@ async function fetchGistById(token, gistId) {
     return await response.json();
 }
 
-async function fetchUserRepos(token) {
-    const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to fetch repositories');
-    }
-
-    return await response.json();
-}
-
-async function fetchRepoProjects(token, owner, repo) {
+async function fetchProjects(token) {
     const response = await fetch("https://api.github.com/graphql", {
         method: "POST",
         headers: {
@@ -391,142 +376,161 @@ async function fetchRepoProjects(token, owner, repo) {
         },
         body: JSON.stringify({
             query: `
-      query {
-        repository(owner:"${owner}", name:"${repo}") {
-          projectsV2(first: 100) {
-            nodes {
-              id
-              title
-              url
-            }
-          }
-        }
-      }
-    `
-        })
-    })
-
-    if (!response.ok) {
-        throw new Error('Failed to fetch projects');
-    }
-
-    return await response.json();
-
-
-
-}
-
-async function fetchProjectColumns(token, projectId) {
-    const response = await fetch("https://api.github.com/graphql", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "Accept": "application/vnd.github+json"
-        },
-        body: JSON.stringify({
-            query: `
-      query {
-        node(id: "${projectId}") {
-        ... on ProjectV2 {
-            id
-            title
-            url
-            shortDescription
-            public
-            closed
-            items(first: 100) {
-            nodes {
-                id
-                type
-                fieldValues(first: 20) {
-                nodes {
-                    ... on ProjectV2ItemFieldTextValue {
-                    text
-                    field {
-                        ... on ProjectV2FieldCommon {
+                query GetAllAccessibleProjectsWithFullDetails {
+                viewer {
+                login
+                name
+                # User's personal projects with full details
+                projectsV2(first: 50) {
+                    nodes {
+                    id
+                    title
+                    url
+                    shortDescription
+                    public
+                    closed
+                    createdAt
+                    updatedAt
+                    owner {
+                        ... on User {
+                        login
+                        name
+                        }
+                        ... on Organization {
+                        login
                         name
                         }
                     }
-                    }
-                    ... on ProjectV2ItemFieldSingleSelectValue {
-                    name
-                    field {
-                        ... on ProjectV2FieldCommon {
-                        name
+                    items(first: 100) {
+                        totalCount
+                        nodes {
+                        id
+                        type
+                        fieldValues(first: 20) {
+                            nodes {
+                            ... on ProjectV2ItemFieldTextValue {
+                                text
+                                field {
+                                ... on ProjectV2FieldCommon {
+                                    name
+                                }
+                                }
+                            }
+                            ... on ProjectV2ItemFieldNumberValue {
+                                number
+                                field {
+                                ... on ProjectV2FieldCommon {
+                                    name
+                                }
+                                }
+                            }
+                            ... on ProjectV2ItemFieldDateValue {
+                                date
+                                field {
+                                ... on ProjectV2FieldCommon {
+                                    name
+                                }
+                                }
+                            }
+                            ... on ProjectV2ItemFieldSingleSelectValue {
+                                name
+                                color
+                                field {
+                                ... on ProjectV2FieldCommon {
+                                    name
+                                }
+                                }
+                            }
+                            ... on ProjectV2ItemFieldIterationValue {
+                                title
+                                startDate
+                                duration
+                                field {
+                                ... on ProjectV2FieldCommon {
+                                    name
+                                }
+                                }
+                            }
+                            }
+                        }
+                        content {
+                            ... on Issue {
+                            id
+                            title
+                            number
+                            state
+                            url
+                            body
+                            createdAt
+                            updatedAt
+                            closedAt
+                            repository {
+                                name
+                                nameWithOwner
+                                owner {
+                                login
+                                }
+                            }
+                            author {
+                                login
+                                avatarUrl
+                            }
+                            labels(first: 10) {
+                                nodes {
+                                name
+                                color
+                                }
+                            }
+                            assignees(first: 10) {
+                                nodes {
+                                login
+                                name
+                                avatarUrl
+                                }
+                            }
+                            milestone {
+                                title
+                                dueOn
+                            }
+                            }
+                            ... on PullRequest {
+                            id
+                            title
+                            number
+                            state
+                            url
+                            body
+                            createdAt
+                            updatedAt
+                            closedAt
+                            mergedAt
+                            repository {
+                                name
+                                nameWithOwner
+                                owner {
+                                login
+                                }
+                            }
+                            author {
+                                login
+                                avatarUrl
+                            }
+                            }
+                            ... on DraftIssue {
+                            id
+                            title
+                            body
+                            createdAt
+                            }
+                        }
                         }
                     }
                     }
                 }
                 }
-                content {
-                ... on Issue {
-                    id
-                    title
-                    number
-                    state
-                    url
-                    body
-                    createdAt
-                    updatedAt
-                    closedAt
-                    repository {
-                    name
-                    owner {
-                        login
-                    }
-                    }
-                    author {
-                    login
-                    }
-                    labels(first: 10) {
-                    nodes {
-                        name
-                        color
-                    }
-                    }
-                    assignees(first: 10) {
-                    nodes {
-                        login
-                        name
-                    }
-                    }
-                }
-                ... on PullRequest {
-                    id
-                    title
-                    number
-                    state
-                    url
-                    body
-                    createdAt
-                    updatedAt
-                    closedAt
-                    mergedAt
-                    repository {
-                    name
-                    owner {
-                        login
-                    }
-                    }
-                    author {
-                    login
-                    }
-                }
-                ... on DraftIssue {
-                    id
-                    title
-                    body
-                    createdAt
-                }
-                }
             }
-            }
-        }
-        }
-    }
 
-    `
+        `
         })
     })
 
@@ -1065,50 +1069,25 @@ async function renameFile() {
 // Projects Management
 // ============================================================================
 
-async function loadRepos() {
+async function loadProjects() {
     const tokenData = await getStoredToken();
     if (!tokenData || !tokenData.access_token) {
         return;
     }
 
     try {
-        allRepos = await fetchUserRepos(tokenData.access_token);
-
-        const repoSelect = document.getElementById('repoSelect');
-        repoSelect.innerHTML = '<option value="" disabled selected>Select a repository</option>';
-
-        allRepos.forEach(repo => {
-            const option = document.createElement('option');
-            option.value = repo.full_name;
-            option.textContent = repo.full_name;
-            option.dataset.url = repo.html_url;
-            repoSelect.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Error loading repos:', error);
-        showStatus('Failed to load repositories', 'error');
-    }
-}
-
-async function loadProjects(owner, repo) {
-    const tokenData = await getStoredToken();
-    if (!tokenData || !tokenData.access_token) {
-        return;
-    }
-
-    try {
-        allProjects = await fetchRepoProjects(tokenData.access_token, owner, repo);
+        allProjects = await fetchProjects(tokenData.access_token);
+        console.log('loadProjects:', allProjects);
 
         const projectSelect = document.getElementById('projectSelect');
         projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
 
         if (allProjects.length === 0) {
-            showStatus('No projects found in this repository', 'info');
-            document.getElementById('projectSelectSection').style.display = 'none';
+            showStatus('No projects found', 'info');
             return;
         }
 
-        allProjects.data.repository.projectsV2.nodes.forEach(project => {
+        allProjects.data.viewer.projectsV2.nodes.forEach(project => {
             const option = document.createElement('option');
             option.value = project.id;
             option.textContent = project.title;
@@ -1116,7 +1095,6 @@ async function loadProjects(owner, repo) {
             projectSelect.appendChild(option);
         });
 
-        document.getElementById('projectSelectSection').style.display = 'block';
     } catch (error) {
         console.error('Error loading projects:', error);
         showStatus('Failed to load projects', 'error');
@@ -1130,9 +1108,8 @@ async function loadProjectIssues(projectId) {
     }
 
     try {
-        const project = allProjects.data.repository.projectsV2.nodes.find(p => p.id === projectId);
+        const project = allProjects.data.viewer.projectsV2.nodes.find(p => p.id === projectId);
         if (!project) return;
-        console.log('allProjects:', allProjects);
 
         currentProject = project;
         document.getElementById('projectTitle').textContent = project.title;
@@ -1140,13 +1117,10 @@ async function loadProjectIssues(projectId) {
         const viewBtn = document.getElementById('viewProjectBtn');
         viewBtn.onclick = () => window.open(project.url, '_blank');
 
-        // Fetch all columns
-        const columns = await fetchProjectColumns(tokenData.access_token, projectId);
-        console.log('Project columns:', columns);
-
+        const columns = project.items;
         const allCards = [];
 
-        columns.data.node.items.nodes.forEach(item => {
+        columns.nodes.forEach(item => {
             if (item.content) {
                 // Find the "Status" field value
                 let status = 'No Status';
@@ -1168,7 +1142,6 @@ async function loadProjectIssues(projectId) {
             }
         });
 
-        console.log(`Loaded ${allCards.length} items in ONE GraphQL call!`);
         displayProjectIssues(allCards);
 
     } catch (error) {
@@ -1285,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             avatarWrapper.style.display = 'block';
 
             await loadGists();
-            await loadRepos();
+            await loadProjects();
             showStatus('Logged in successfully!', 'success');
 
         } catch (error) {
@@ -1354,34 +1327,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Projects tab - Repo select
-    document.getElementById('repoSelect').addEventListener('change', async (e) => {
-        const repoFullName = e.target.value;
-        if (!repoFullName) return;
-
-        const [owner, repo] = repoFullName.split('/');
-        currentRepo = { owner, repo, fullName: repoFullName };
-
-        hideProjectIssues();
-        await loadProjects(owner, repo);
-    });
-
-    // Projects tab - Refresh repos
-    document.getElementById('refreshReposBtn').addEventListener('click', async () => {
-        const btn = document.getElementById('refreshReposBtn');
-        btn.disabled = true;
-
-        try {
-            await loadRepos();
-            showStatus('Repositories refreshed successfully', 'success');
-        } catch (error) {
-            console.error('Error refreshing repos:', error);
-            showStatus('Failed to refresh repositories', 'error');
-        } finally {
-            btn.disabled = false;
-        }
-    });
-
     // Projects tab - Project select
     document.getElementById('projectSelect').addEventListener('change', async (e) => {
         const projectId = e.target.value;
@@ -1399,10 +1344,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.disabled = true;
 
         try {
-            if (currentRepo) {
-                await loadProjects(currentRepo.owner, currentRepo.repo);
-                showStatus('Projects refreshed successfully', 'success');
-            }
+            await loadProjects();
+            showStatus('Projects refreshed successfully', 'success');
+
         } catch (error) {
             console.error('Error refreshing projects:', error);
             showStatus('Failed to refresh projects', 'error');
@@ -1488,7 +1432,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             avatarWrapper.style.display = 'block';
 
             await loadGists();
-            await loadRepos();
+            await loadProjects();
 
         } catch (error) {
             console.error('Error loading user data:', error);
