@@ -799,10 +799,9 @@ input:checked+.slider:before {
 	padding: 3%;
 	border-bottom: 1px solid var(--border-color);
 	justify-content: space-between;
-	align-items: center;
 	gap: 12px;
-    display: grid;
-    flex-wrap: wrap;
+	display: flex;
+	flex-wrap: wrap;
 }
 
 .project-issues-header h3 {
@@ -814,7 +813,7 @@ input:checked+.slider:before {
 }
 
 .issues-table-container {
-	padding: 16px;
+	padding: 0 16px;
 	max-height: 300px;
 	overflow-y: auto;
 }
@@ -968,10 +967,9 @@ input:checked+.slider:before {
 .gist-preview-header {
 	padding: 3%;
 	border-bottom: 1px solid var(--border-color);
-	display: grid;
 	justify-content: space-between;
-	align-items: center;
 	gap: 12px;
+	display: flex;
 	flex-wrap: wrap;
 }
 
@@ -1141,6 +1139,7 @@ input:checked+.slider:before {
 		opacity: 0;
 		transform: translateY(-4px);
 	}
+
 	to {
 		opacity: 1;
 		transform: translateY(0);
@@ -1195,4 +1194,120 @@ input:checked+.slider:before {
 
 ::-webkit-scrollbar-thumb:hover {
 	background: var(--text-secondary);
+}
+
+/* ============================================================================
+   Issue Actions Menu
+   ============================================================================ */
+
+.issue-actions-cell {
+	text-align: center;
+	vertical-align: middle;
+	position: relative;
+}
+
+.issue-actions-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 8px;
+	border-radius: 4px;
+	color: var(--text-secondary);
+	transition: all 0.2s;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.issue-actions-btn:hover {
+	background-color: var(--bg-tertiary);
+	color: var(--text-primary);
+}
+
+.issue-actions-btn svg {
+	width: 16px;
+	height: 16px;
+}
+
+.issue-actions-menu {
+	background: var(--bg-primary);
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	min-width: 180px;
+	display: none;
+	animation: dropdownFadeIn 0.15s ease;
+}
+
+.issue-actions-menu.show {
+	display: block;
+}
+
+.issue-actions-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+	cursor: pointer;
+	transition: all 0.15s;
+	border-radius: 6px;
+	margin: 4px;
+	font-size: 14px;
+	color: var(--text-primary);
+	text-decoration: none;
+}
+
+.issue-actions-menu-item:hover {
+	background-color: var(--bg-secondary);
+}
+
+.issue-actions-menu-item svg {
+	width: 16px;
+	height: 16px;
+	color: var(--text-secondary);
+	flex-shrink: 0;
+}
+
+.issue-actions-menu-item.danger {
+	color: var(--error-text);
+}
+
+.issue-actions-menu-item.danger:hover {
+	background-color: var(--error-bg);
+}
+
+.issue-actions-menu-item.danger svg {
+	color: var(--error-text);
+}
+
+/* ============================================================================
+   Button Tooltips
+   ============================================================================ */
+
+.btn-with-tooltip {
+	position: relative;
+}
+
+.btn-with-tooltip::after {
+	content: attr(data-tooltip);
+	position: absolute;
+	top: 120%;
+	left: 50%;
+	transform: translateX(-50%) translateY(-8px);
+	background: var(--text-primary);
+	color: var(--bg-primary);
+	padding: 6px 10px;
+	border-radius: 6px;
+	font-size: 12px;
+	white-space: nowrap;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.2s ease, transform 0.2s ease;
+	box-shadow: var(--shadow-md);
+	z-index: 1000;
+}
+
+.btn-with-tooltip:hover::after {
+	opacity: 1;
+	transform: translateX(-50%) translateY(-4px);
 }

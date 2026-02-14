@@ -775,15 +775,29 @@ async function saveGist() {
             files[filename] = { content };
             await updateGist(tokenData.access_token, currentGist.id, files);
             showStatus('Gist updated successfully!', 'success');
+
+            // Reload and display the updated gist
+            await loadGists();
+            currentGist = await fetchGistById(tokenData.access_token, currentGist.id);
+            displayGistPreview(currentGist);
         } else {
             // Create new gist
-            await createGist(tokenData.access_token, description, filename, content, isPublic);
+            const newGist = await createGist(tokenData.access_token, description, filename, content, isPublic);
             showStatus('Gist created successfully!', 'success');
+
+            // Reload gists list
+            await loadGists();
+
+            // Select the newly created gist in the dropdown
+            const gistSelect = document.getElementById('gistSelect');
+            gistSelect.value = newGist.id;
+
+            // Set as current and display preview
+            currentGist = newGist;
+            displayGistPreview(newGist);
         }
 
-        await loadGists();
         closeModal('gistEditorModal');
-        hideGistPreview();
 
         // Re-enable filename field
         document.getElementById('gistFilename').disabled = false;
@@ -864,6 +878,73 @@ async function saveFileChanges() {
     } catch (error) {
         console.error('Error saving file:', error);
         showStatus('Failed to save file: ' + error.message, 'error');
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+function openAddFileModal() {
+    if (!currentGist) return;
+
+    // Clear form fields
+    document.getElementById('newFileName').value = '';
+    document.getElementById('newFileContent').value = '';
+    openModal('addFileModal');
+}
+
+async function saveNewFile() {
+    if (!currentGist) return;
+
+    const filename = document.getElementById('newFileName').value.trim();
+    const content = document.getElementById('newFileContent').value.trim();
+
+    if (!filename) {
+        showStatus('Please enter a filename', 'error');
+        return;
+    }
+
+    if (!content) {
+        showStatus('Content cannot be empty', 'error');
+        return;
+    }
+
+    // Check if file already exists
+    if (currentGist.files[filename]) {
+        showStatus('A file with this name already exists', 'error');
+        return;
+    }
+
+    const saveBtn = document.getElementById('saveNewFile');
+    saveBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Add the new file to the gist
+        const files = {};
+        files[filename] = { content };
+        await updateGist(tokenData.access_token, currentGist.id, files);
+
+        showStatus('File added successfully!', 'success');
+
+        // Clear form fields
+        document.getElementById('newFileName').value = '';
+        document.getElementById('newFileContent').value = '';
+
+        // Reload the gist
+        currentGist = await fetchGistById(tokenData.access_token, currentGist.id);
+        await loadGists();
+        displayGistPreview(currentGist);
+
+        closeModal('addFileModal');
+
+    } catch (error) {
+        console.error('Error adding file:', error);
+        showStatus('Failed to add file: ' + error.message, 'error');
     } finally {
         saveBtn.disabled = false;
     }
@@ -1147,7 +1228,7 @@ async function loadProjects() {
         allProjects.data.viewer.projectsV2.nodes.forEach(project => {
             // Extract and store field definitions for each project
             projectFieldDefinitions[project.id] = extractFieldDefinitions(project);
-            
+
             const option = document.createElement('option');
             option.value = project.id;
             option.textContent = project.title;
@@ -1185,7 +1266,7 @@ async function loadProjectIssues(projectId) {
                 // Find the "Status" field value with color
                 let statusName = 'No Status';
                 let statusColor = null;
-                
+
                 item.fieldValues.nodes.forEach(fieldValue => {
                     if (fieldValue.field?.name === 'Status' && fieldValue.name) {
                         statusName = fieldValue.name;
@@ -1234,8 +1315,8 @@ function displayProjectIssues(issues) {
             const row = document.createElement('tr');
 
             // Convert GitHub color enum to CSS hex color
-            const cssColor = issue.statusColor 
-                ? githubColorToCSS(issue.statusColor) 
+            const cssColor = issue.statusColor
+                ? githubColorToCSS(issue.statusColor)
                 : '#6b7280'; // Default gray
 
             const statusBadge = `
@@ -1278,6 +1359,13 @@ function displayProjectIssues(issues) {
                 <td>
                     ${statusBadge}
                 </td>
+                <td class="issue-actions-cell">
+                    <button class="issue-actions-btn" data-issue-id="${issue.itemId}" data-issue-url="${issue.url || ''}" data-issue-title="${issue.title}" data-issue-type="DRAFT">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+                        </svg>
+                    </button>
+                </td>
             `;
             } else {
                 row.innerHTML = `
@@ -1289,6 +1377,13 @@ function displayProjectIssues(issues) {
                 </td>
                 <td>
                     ${statusBadge}
+                </td>
+                <td class="issue-actions-cell">
+                    <button class="issue-actions-btn" data-issue-id="${issue.itemId}" data-issue-url="${issue.url}" data-issue-title="${issue.title}" data-issue-type="ISSUE">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+                        </svg>
+                    </button>
                 </td>
             `;
             }
@@ -1311,6 +1406,14 @@ function displayProjectIssues(issues) {
                 e.currentTarget.style.transform = 'scale(1)';
             });
         });
+
+        // Add event listeners for issue action buttons
+        document.querySelectorAll('.issue-actions-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showIssueActionsMenu(e.currentTarget);
+            });
+        });
     }
 
     issuesSection.style.display = 'block';
@@ -1323,6 +1426,266 @@ function hideProjectIssues() {
 
 // ============================================================================
 // Status Change Dropdown
+// ============================================================================
+
+let currentIssueData = null;
+
+function showIssueActionsMenu(button) {
+    // Close any existing menus
+    document.querySelectorAll('.issue-actions-menu').forEach(menu => menu.remove());
+
+    const issueId = button.getAttribute('data-issue-id');
+    const issueUrl = button.getAttribute('data-issue-url');
+    const issueTitle = button.getAttribute('data-issue-title');
+    const issueType = button.getAttribute('data-issue-type');
+    const issueRepo = button.getAttribute('data-issue-repo');
+
+    // Store current issue data
+    currentIssueData = { issueId, issueUrl, issueTitle, issueType, issueRepo };
+
+    // Create menu
+    const menu = document.createElement('div');
+    menu.className = 'issue-actions-menu show';
+
+    // Open on GitHub
+    if (issueUrl) {
+        const openItem = document.createElement('a');
+        openItem.href = issueUrl;
+        openItem.target = '_blank';
+        openItem.className = 'issue-actions-menu-item';
+        openItem.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.11.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.19 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            Open on GitHub
+        `;
+        menu.appendChild(openItem);
+    }
+
+    // Remove from project
+    const removeItem = document.createElement('div');
+    removeItem.className = 'issue-actions-menu-item';
+    removeItem.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 5.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm2-3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zM0 11.5A1.5 1.5 0 0 0 1.5 13h13a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H1.5A1.5 1.5 0 0 0 0 1.5v10z"/>
+        </svg>
+        Remove from Project
+    `;
+    removeItem.addEventListener('click', () => {
+        removeIssueFromProject(issueId);
+    });
+    menu.appendChild(removeItem);
+
+    // Delete issue (only for actual issues, not drafts, and if we have repository info)
+    if (issueType === 'ISSUE' && issueUrl) {
+        const deleteItem = document.createElement('div');
+        deleteItem.className = 'issue-actions-menu-item danger';
+        deleteItem.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1ZM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118ZM2.5 3h11V2h-11v1Z"/>
+            </svg>
+            Delete Issue
+        `;
+        deleteItem.addEventListener('click', () => {
+            deleteIssueCompletely(issueUrl, issueTitle);
+        });
+        menu.appendChild(deleteItem);
+    }
+
+    // Append to body instead of cell to prevent cutoff
+    document.body.appendChild(menu);
+
+    // Position the menu properly using fixed positioning
+    const buttonRect = button.getBoundingClientRect();
+    const container = document.querySelector('.container');
+    const containerRect = container.getBoundingClientRect();
+
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '10000';
+
+    // Wait for menu to render to get its dimensions
+    setTimeout(() => {
+        const menuRect = menu.getBoundingClientRect();
+
+        let top = buttonRect.bottom + 4;
+        let left = buttonRect.right - menuRect.width;
+
+        // Check if menu would go off the right edge
+        if (left + menuRect.width > containerRect.right) {
+            left = containerRect.right - menuRect.width - 8;
+        }
+
+        // Make sure it doesn't go off the left edge
+        if (left < containerRect.left) {
+            left = containerRect.left + 8;
+        }
+
+        // Check if menu would go off the bottom
+        if (top + menuRect.height > containerRect.bottom) {
+            // Show above the button instead
+            top = buttonRect.top - menuRect.height - 4;
+        }
+
+        // Make sure it doesn't go off the top
+        if (top < containerRect.top) {
+            top = containerRect.top + 8;
+            menu.style.maxHeight = `${containerRect.height - 16}px`;
+            menu.style.overflowY = 'auto';
+        }
+
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+    }, 0);
+
+    // Close menu when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', closeIssueActionsMenu);
+    }, 0);
+}
+
+function closeIssueActionsMenu() {
+    document.querySelectorAll('.issue-actions-menu').forEach(menu => menu.remove());
+    document.removeEventListener('click', closeIssueActionsMenu);
+}
+
+async function removeIssueFromProject(itemId) {
+    if (!currentProject) return;
+
+    if (!confirm('Remove this issue from the project? The issue will still exist on GitHub.')) {
+        return;
+    }
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        const query = `
+            mutation DeleteProjectV2Item($projectId: ID!, $itemId: ID!) {
+                deleteProjectV2Item(
+                    input: {
+                        projectId: $projectId
+                        itemId: $itemId
+                    }
+                ) {
+                    deletedItemId
+                }
+            }
+        `;
+
+        const response = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: query,
+                variables: {
+                    projectId: currentProject.id,
+                    itemId: itemId
+                }
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+
+        showStatus('Issue removed from project', 'success');
+
+        // Reload the project issues
+        await loadProjects();
+        await loadProjectIssues(currentProject.id);
+
+    } catch (error) {
+        console.error('Error removing issue from project:', error);
+        showStatus('Failed to remove issue: ' + error.message, 'error');
+    }
+}
+
+async function deleteIssueCompletely(issueUrl, issueTitle) {
+    if (!issueUrl) return;
+
+    // Parse the issue URL to get owner, repo, and issue number
+    // URL format: https://github.com/{owner}/{repo}/issues/{number}
+    const urlMatch = issueUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
+
+    if (!urlMatch) {
+        showStatus('Could not parse issue URL', 'error');
+        return;
+    }
+
+    const [, owner, repo, issueNumber] = urlMatch;
+
+    if (!confirm(`⚠️ DELETE ISSUE PERMANENTLY?\n\nThis will delete "${issueTitle}" from GitHub completely.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?`)) {
+        return;
+    }
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Use GitHub REST API to delete the issue
+        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${tokenData.access_token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                state: 'closed',
+                state_reason: 'not_planned'
+            })
+        });
+
+        if (!response.ok) {
+            // If closing fails, try to get error details
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to close issue');
+        }
+
+        showStatus('Issue closed successfully', 'success');
+
+        // Reload the project issues
+        await loadProjects();
+        if (currentProject) {
+            await loadProjectIssues(currentProject.id);
+        }
+
+    } catch (error) {
+        console.error('Error deleting issue:', error);
+        showStatus('Failed to delete issue: ' + error.message, 'error');
+    }
+}
+
+// Note: GitHub's API doesn't provide a direct way to edit issue title/description through Projects API
+// Issues must be edited through the Issues API using the repository owner/name and issue number
+// This functionality can be added in the future by:
+// 1. Extracting repository and issue number from the issue URL
+// 2. Using the PATCH /repos/{owner}/{repo}/issues/{issue_number} endpoint
+// For now, users can click "Open on GitHub" to edit issues directly
+
+function openEditIssueModal() {
+    // Placeholder for future implementation
+    showStatus('To edit this issue, click "Open on GitHub"', 'info');
+}
+
+async function saveIssueEdits() {
+    // Placeholder for future implementation
+    closeModal('editIssueModal');
+}
+
 // ============================================================================
 
 let currentStatusDropdown = null;
@@ -1381,37 +1744,37 @@ function showStatusDropdown(badgeElement, itemId, currentStatus) {
     });
 
     document.body.appendChild(dropdown);
-    
+
     const badgeRect = badgeElement.getBoundingClientRect();
     const container = document.querySelector('.container');
     const containerRect = container.getBoundingClientRect();
-    
+
     dropdown.style.position = 'fixed';
     dropdown.style.zIndex = '10000';
-    
+
     let top = badgeRect.bottom + 4;
     let left = badgeRect.left;
-    
+
     // Wait for dropdown to render to get its dimensions
     setTimeout(() => {
         const dropdownRect = dropdown.getBoundingClientRect();
-        
+
         // Check if dropdown would go off the right edge
         if (left + dropdownRect.width > containerRect.right) {
             left = containerRect.right - dropdownRect.width - 8;
         }
-        
+
         // Make sure it doesn't go off the left edge
         if (left < containerRect.left) {
             left = containerRect.left + 8;
         }
-        
+
         // Check if dropdown would go off the bottom
         if (top + dropdownRect.height > containerRect.bottom) {
             // Show above the badge instead
             top = badgeRect.top - dropdownRect.height - 4;
         }
-        
+
         // Make sure it doesn't go off the top
         if (top < containerRect.top) {
             // If it doesn't fit above or below, position it at the top with max height
@@ -1419,7 +1782,7 @@ function showStatusDropdown(badgeElement, itemId, currentStatus) {
             dropdown.style.maxHeight = `${containerRect.height - 16}px`;
             dropdown.style.overflowY = 'auto';
         }
-        
+
         dropdown.style.top = `${top}px`;
         dropdown.style.left = `${left}px`;
     }, 0);
@@ -1502,12 +1865,12 @@ async function updateItemStatusDirect(itemId, optionId, optionName, optionColor)
         const badge = document.querySelector(`[data-item-id="${itemId}"]`);
         if (badge) {
             const cssColor = githubColorToCSS(optionColor);
-            
+
             badge.style.backgroundColor = `${cssColor}15`;
             badge.style.color = cssColor;
             badge.style.borderColor = `${cssColor}30`;
             badge.setAttribute('data-current-status', optionName);
-            
+
             badge.innerHTML = `
                 <span style="
                     width: 8px;
@@ -1521,7 +1884,7 @@ async function updateItemStatusDirect(itemId, optionId, optionName, optionColor)
                     <path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
                 </svg>
             `;
-            
+
             // Re-attach event listener
             badge.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -1567,22 +1930,22 @@ async function fetchUserRepositories(token) {
 
 async function openAddIssueModal() {
     if (!currentProject) return;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         if (userRepositories.length === 0) {
             showStatus('Loading repositories...', 'info');
             userRepositories = await fetchUserRepositories(tokenData.access_token);
         }
-        
+
         const repoSelect = document.getElementById('issueRepository');
         repoSelect.innerHTML = '<option value="" disabled selected>Select a repository</option>';
-        
+
         userRepositories.forEach(repo => {
             const option = document.createElement('option');
             option.value = repo.full_name;
@@ -1591,12 +1954,12 @@ async function openAddIssueModal() {
             option.dataset.name = repo.name;
             repoSelect.appendChild(option);
         });
-        
+
         document.getElementById('issueTitle').value = '';
         document.getElementById('issueBody').value = '';
-        
+
         openModal('addIssueModal');
-        
+
     } catch (error) {
         console.error('Error opening add issue modal:', error);
         showStatus('Failed to load repositories: ' + error.message, 'error');
@@ -1608,31 +1971,30 @@ async function addIssueToProject() {
     const selectedOption = repoSelect.options[repoSelect.selectedIndex];
     const title = document.getElementById('issueTitle').value.trim();
     const body = document.getElementById('issueBody').value.trim();
-    
+
     if (!selectedOption || !selectedOption.value) {
         showStatus('Please select a repository', 'error');
         return;
     }
-    
+
     if (!title) {
         showStatus('Please enter an issue title', 'error');
         return;
     }
-    
+
     const confirmBtn = document.getElementById('confirmAddIssue');
     confirmBtn.disabled = true;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         const owner = selectedOption.dataset.owner;
         const repoName = selectedOption.dataset.name;
-        
-        // Create the issue in the repository
+
         const createIssueResponse = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues`, {
             method: 'POST',
             headers: {
@@ -1645,15 +2007,14 @@ async function addIssueToProject() {
                 body: body || undefined
             })
         });
-        
+
         if (!createIssueResponse.ok) {
             const errorData = await createIssueResponse.json();
             throw new Error(errorData.message || 'Failed to create issue');
         }
-        
+
         const createdIssue = await createIssueResponse.json();
-        
-        // Add the issue to the project
+
         const query = `
             mutation AddProjectV2Item($projectId: ID!, $contentId: ID!) {
                 addProjectV2ItemById(input: {
@@ -1666,7 +2027,7 @@ async function addIssueToProject() {
                 }
             }
         `;
-        
+
         const graphqlResponse = await fetch("https://api.github.com/graphql", {
             method: "POST",
             headers: {
@@ -1681,19 +2042,27 @@ async function addIssueToProject() {
                 }
             })
         });
-        
+
         const result = await graphqlResponse.json();
-        
+
         if (result.errors) {
             console.error('GraphQL Error:', result.errors);
             throw new Error(result.errors[0].message);
         }
-        
+
         showStatus('Issue added to project successfully!', 'success');
+
+        document.getElementById('issueTitle').value = '';
+        document.getElementById('issueBody').value = '';
+        document.getElementById('issueRepository').selectedIndex = 0;
+
         closeModal('addIssueModal');
-        
-        await loadProjectIssues(currentProject.id);
-        
+
+        const projectId = currentProject.id;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await loadProjects();
+        await loadProjectIssues(projectId);
+
     } catch (error) {
         console.error('Error adding issue to project:', error);
         showStatus('Failed to add issue: ' + error.message, 'error');
@@ -1704,31 +2073,31 @@ async function addIssueToProject() {
 
 function openRenameProjectModal() {
     if (!currentProject) return;
-    
+
     document.getElementById('newProjectTitle').value = currentProject.title;
     openModal('renameProjectModal');
 }
 
 async function renameProject() {
     if (!currentProject) return;
-    
+
     const newTitle = document.getElementById('newProjectTitle').value.trim();
-    
+
     if (!newTitle) {
         showStatus('Please enter a project title', 'error');
         return;
     }
-    
+
     const renameBtn = document.getElementById('confirmRenameProject');
     renameBtn.disabled = true;
-    
+
     try {
         const tokenData = await getStoredToken();
         if (!tokenData || !tokenData.access_token) {
             showStatus('Not authenticated', 'error');
             return;
         }
-        
+
         const query = `
             mutation UpdateProject($projectId: ID!, $title: String!) {
                 updateProjectV2(
@@ -1744,7 +2113,7 @@ async function renameProject() {
                 }
             }
         `;
-        
+
         const response = await fetch("https://api.github.com/graphql", {
             method: "POST",
             headers: {
@@ -1759,32 +2128,32 @@ async function renameProject() {
                 }
             })
         });
-        
+
         const result = await response.json();
-        
+
         if (result.errors) {
             console.error('GraphQL Error:', result.errors);
             throw new Error(result.errors[0].message);
         }
-        
+
         showStatus('Project renamed successfully', 'success');
-        
+
         currentProject.title = newTitle;
         document.getElementById('projectTitle').textContent = newTitle;
-        
+
         const projectSelect = document.getElementById('projectSelect');
         const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
         if (selectedOption) {
             selectedOption.textContent = newTitle;
         }
-        
+
         const projectIndex = allProjects.data.viewer.projectsV2.nodes.findIndex(p => p.id === currentProject.id);
         if (projectIndex !== -1) {
             allProjects.data.viewer.projectsV2.nodes[projectIndex].title = newTitle;
         }
-        
+
         closeModal('renameProjectModal');
-        
+
     } catch (error) {
         console.error('Error renaming project:', error);
         showStatus('Failed to rename project: ' + error.message, 'error');
@@ -1793,9 +2162,292 @@ async function renameProject() {
     }
 }
 
+function openCreateProjectModal() {
+    // Clear form fields
+    document.getElementById('newProjectTitleInput').value = '';
+    document.getElementById('newProjectDescription').value = '';
+    document.getElementById('projectPublic').checked = false;
+    openModal('createProjectModal');
+}
+
+async function createNewProject() {
+    const title = document.getElementById('newProjectTitleInput').value.trim();
+    const description = document.getElementById('newProjectDescription').value.trim();
+    const isPublic = document.getElementById('projectPublic').checked;
+
+    if (!title) {
+        showStatus('Please enter a project title', 'error');
+        return;
+    }
+
+    const confirmBtn = document.getElementById('confirmCreateProject');
+    confirmBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Get the current user's ID
+        const userQuery = `
+            query {
+                viewer {
+                    id
+                }
+            }
+        `;
+
+        const userResponse = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({ query: userQuery })
+        });
+
+        const userData = await userResponse.json();
+
+        if (userData.errors) {
+            throw new Error(userData.errors[0].message);
+        }
+
+        const ownerId = userData.data.viewer.id;
+
+        // Create the project
+        const createQuery = `
+            mutation CreateProject($ownerId: ID!, $title: String!) {
+                createProjectV2(
+                    input: {
+                        ownerId: $ownerId
+                        title: $title
+                    }
+                ) {
+                    projectV2 {
+                        id
+                        title
+                        url
+                        public
+                    }
+                }
+            }
+        `;
+
+        const createResponse = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: createQuery,
+                variables: {
+                    ownerId: ownerId,
+                    title: title
+                }
+            })
+        });
+
+        const result = await createResponse.json();
+
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+
+        const newProjectId = result.data.createProjectV2.projectV2.id;
+
+        // Update the project visibility if needed
+        if (isPublic !== result.data.createProjectV2.projectV2.public) {
+            const updateQuery = `
+                mutation UpdateProjectVisibility($projectId: ID!, $public: Boolean!) {
+                    updateProjectV2(
+                        input: {
+                            projectId: $projectId
+                            public: $public
+                        }
+                    ) {
+                        projectV2 {
+                            id
+                            public
+                        }
+                    }
+                }
+            `;
+
+            const updateResponse = await fetch("https://api.github.com/graphql", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${tokenData.access_token}`,
+                },
+                body: JSON.stringify({
+                    query: updateQuery,
+                    variables: {
+                        projectId: newProjectId,
+                        public: isPublic
+                    }
+                })
+            });
+
+            const updateResult = await updateResponse.json();
+
+            if (updateResult.errors) {
+                console.error('Error updating project visibility:', updateResult.errors);
+                // Don't throw here, project was created successfully
+            }
+        }
+
+        showStatus('Project created successfully!', 'success');
+
+        // Clear form fields
+        document.getElementById('newProjectTitleInput').value = '';
+        document.getElementById('newProjectDescription').value = '';
+        document.getElementById('projectPublic').checked = false;
+
+        closeModal('createProjectModal');
+
+        // Reload projects to show the new one
+        await loadProjects();
+
+        // Select the newly created project
+        const projectSelect = document.getElementById('projectSelect');
+        projectSelect.value = newProjectId;
+
+        // Trigger change event to load the project
+        await loadProjectIssues(newProjectId);
+
+    } catch (error) {
+        console.error('Error creating project:', error);
+        showStatus('Failed to create project: ' + error.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
+}
+
+function openEditProjectModal() {
+    if (!currentProject) return;
+
+    // Populate the form with current project data
+    document.getElementById('editProjectTitle').value = currentProject.title;
+    document.getElementById('editProjectDescription').value = currentProject.shortDescription || '';
+
+    // Set the visibility radio button
+    if (currentProject.public) {
+        document.getElementById('editProjectPublic').checked = true;
+    } else {
+        document.getElementById('editProjectPrivate').checked = true;
+    }
+
+    openModal('editProjectModal');
+}
+
+async function saveProjectEdits() {
+    if (!currentProject) return;
+
+    const newTitle = document.getElementById('editProjectTitle').value.trim();
+    const newDescription = document.getElementById('editProjectDescription').value.trim();
+    const isPublic = document.getElementById('editProjectPublic').checked;
+
+    if (!newTitle) {
+        showStatus('Please enter a project title', 'error');
+        return;
+    }
+
+    const confirmBtn = document.getElementById('confirmEditProject');
+    confirmBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Update project title, description, and visibility
+        const query = `
+            mutation UpdateProject($projectId: ID!, $title: String!, $shortDescription: String, $public: Boolean!) {
+                updateProjectV2(
+                    input: {
+                        projectId: $projectId
+                        title: $title
+                        shortDescription: $shortDescription
+                        public: $public
+                    }
+                ) {
+                    projectV2 {
+                        id
+                        title
+                        shortDescription
+                        public
+                    }
+                }
+            }
+        `;
+
+        const response = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: query,
+                variables: {
+                    projectId: currentProject.id,
+                    title: newTitle,
+                    shortDescription: newDescription || null,
+                    public: isPublic
+                }
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+
+        showStatus('Project updated successfully', 'success');
+
+        // Update the local project data
+        currentProject.title = newTitle;
+        currentProject.shortDescription = newDescription;
+        currentProject.public = isPublic;
+
+        // Update the UI
+        document.getElementById('projectTitle').textContent = newTitle;
+
+        const projectSelect = document.getElementById('projectSelect');
+        const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
+        if (selectedOption) {
+            selectedOption.textContent = newTitle;
+        }
+
+        // Update in allProjects array
+        const projectIndex = allProjects.data.viewer.projectsV2.nodes.findIndex(p => p.id === currentProject.id);
+        if (projectIndex !== -1) {
+            allProjects.data.viewer.projectsV2.nodes[projectIndex].title = newTitle;
+            allProjects.data.viewer.projectsV2.nodes[projectIndex].shortDescription = newDescription;
+            allProjects.data.viewer.projectsV2.nodes[projectIndex].public = isPublic;
+        }
+
+        closeModal('editProjectModal');
+
+    } catch (error) {
+        console.error('Error updating project:', error);
+        showStatus('Failed to update project: ' + error.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
+}
+
 async function deleteCurrentProject() {
     if (!currentProject) return;
-    
+
     deleteCallback = async () => {
         try {
             const tokenData = await getStoredToken();
@@ -1803,7 +2455,7 @@ async function deleteCurrentProject() {
                 showStatus('Not authenticated', 'error');
                 return;
             }
-            
+
             const query = `
                 mutation DeleteProject($projectId: ID!) {
                     deleteProjectV2(
@@ -1817,7 +2469,7 @@ async function deleteCurrentProject() {
                     }
                 }
             `;
-            
+
             const response = await fetch("https://api.github.com/graphql", {
                 method: "POST",
                 headers: {
@@ -1831,37 +2483,37 @@ async function deleteCurrentProject() {
                     }
                 })
             });
-            
+
             const result = await response.json();
-            
+
             if (result.errors) {
                 console.error('GraphQL Error:', result.errors);
                 throw new Error(result.errors[0].message);
             }
-            
+
             showStatus('Project deleted successfully', 'success');
-            
+
             const projectIndex = allProjects.data.viewer.projectsV2.nodes.findIndex(p => p.id === currentProject.id);
             if (projectIndex !== -1) {
                 allProjects.data.viewer.projectsV2.nodes.splice(projectIndex, 1);
             }
-            
+
             const projectSelect = document.getElementById('projectSelect');
             const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
             if (selectedOption) {
                 selectedOption.remove();
             }
-            
+
             projectSelect.value = '';
             hideProjectIssues();
-            
+
         } catch (error) {
             console.error('Error deleting project:', error);
             showStatus('Failed to delete project: ' + error.message, 'error');
         }
     };
-    
-    document.getElementById('deleteConfirmMessage').textContent = 
+
+    document.getElementById('deleteConfirmMessage').textContent =
         `Are you sure you want to delete the project "${currentProject.title}"? This action cannot be undone.`;
     openModal('deleteConfirmModal');
 }
@@ -2021,8 +2673,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         openCreateGistModal();
     });
 
+    // Create new project button
+    document.getElementById('createNewProjectBtn').addEventListener('click', () => {
+        openCreateProjectModal();
+    });
+
     // Edit gist button
     document.getElementById('editGistBtn').addEventListener('click', openFileEditorModal);
+
+    // Add file button
+    document.getElementById('addFileBtn').addEventListener('click', openAddFileModal);
 
     // Rename gist button
     document.getElementById('renameGistBtn').addEventListener('click', openRenameGistModal);
@@ -2040,6 +2700,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('gistFilename').disabled = false;
     });
     document.getElementById('saveGist').addEventListener('click', saveGist);
+
+    // Add file modal
+    document.getElementById('closeAddFileModal').addEventListener('click', () => closeModal('addFileModal'));
+    document.getElementById('cancelAddFile').addEventListener('click', () => closeModal('addFileModal'));
+    document.getElementById('saveNewFile').addEventListener('click', saveNewFile);
 
     // File editor modal
     document.getElementById('closeFileEditorModal').addEventListener('click', () => closeModal('fileEditorModal'));
@@ -2074,8 +2739,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('cancelAddIssue').addEventListener('click', () => closeModal('addIssueModal'));
     document.getElementById('confirmAddIssue').addEventListener('click', addIssueToProject);
 
+    // Edit issue modal
+    document.getElementById('closeEditIssueModal').addEventListener('click', () => closeModal('editIssueModal'));
+    document.getElementById('cancelEditIssue').addEventListener('click', () => closeModal('editIssueModal'));
+    document.getElementById('confirmEditIssue').addEventListener('click', saveIssueEdits);
+
+    // Create project modal
+    document.getElementById('closeCreateProjectModal').addEventListener('click', () => closeModal('createProjectModal'));
+    document.getElementById('cancelCreateProject').addEventListener('click', () => closeModal('createProjectModal'));
+    document.getElementById('confirmCreateProject').addEventListener('click', createNewProject);
+
+    // Edit project modal
+    document.getElementById('closeEditProjectModal').addEventListener('click', () => closeModal('editProjectModal'));
+    document.getElementById('cancelEditProject').addEventListener('click', () => closeModal('editProjectModal'));
+    document.getElementById('confirmEditProject').addEventListener('click', saveProjectEdits);
+
     // Project actions
     document.getElementById('addIssueBtn').addEventListener('click', openAddIssueModal);
+    document.getElementById('editProjectBtn').addEventListener('click', openEditProjectModal);
     document.getElementById('renameProjectBtn').addEventListener('click', openRenameProjectModal);
     document.getElementById('deleteProjectBtn').addEventListener('click', deleteCurrentProject);
 
