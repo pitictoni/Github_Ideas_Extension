@@ -1635,27 +1635,57 @@ async function deleteIssueCompletely(issueUrl, issueTitle) {
             return;
         }
 
-        // Use GitHub REST API to delete the issue
-        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
-            method: 'PATCH',
+        // First, get the issue's node_id using REST API
+        const getIssueResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+            method: 'GET',
             headers: {
                 'Authorization': `Bearer ${tokenData.access_token}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+
+        if (!getIssueResponse.ok) {
+            throw new Error('Failed to fetch issue details');
+        }
+
+        const issueData = await getIssueResponse.json();
+        const issueNodeId = issueData.node_id;
+
+        // Now delete the issue using GraphQL
+        const deleteMutation = `
+            mutation DeleteIssue($issueId: ID!) {
+                deleteIssue(input: {
+                    issueId: $issueId
+                }) {
+                    repository {
+                        id
+                    }
+                }
+            }
+        `;
+
+        const deleteResponse = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
             },
             body: JSON.stringify({
-                state: 'closed',
-                state_reason: 'not_planned'
+                query: deleteMutation,
+                variables: {
+                    issueId: issueNodeId
+                }
             })
         });
 
-        if (!response.ok) {
-            // If closing fails, try to get error details
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to close issue');
+        const result = await deleteResponse.json();
+
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
         }
 
-        showStatus('Issue closed successfully', 'success');
+        showStatus('Issue deleted permanently', 'success');
 
         // Reload the project issues
         await loadProjects();
@@ -1965,6 +1995,112 @@ async function openAddIssueModal() {
         showStatus('Failed to load repositories: ' + error.message, 'error');
     }
 }
+
+// ============================================================================
+// Choose Add Type Modal
+// ============================================================================
+
+function openChooseAddTypeModal() {
+    if (!currentProject) return;
+    openModal('chooseAddTypeModal');
+}
+
+// ============================================================================
+// Add Draft Issue
+// ============================================================================
+
+function openAddDraftModal() {
+    if (!currentProject) return;
+    
+    // Clear form fields
+    document.getElementById('draftTitle').value = '';
+    document.getElementById('draftBody').value = '';
+    
+    openModal('addDraftModal');
+}
+
+async function addDraftToProject() {
+    const title = document.getElementById('draftTitle').value.trim();
+    const body = document.getElementById('draftBody').value.trim();
+
+    if (!title) {
+        showStatus('Please enter a draft title', 'error');
+        return;
+    }
+
+    const confirmBtn = document.getElementById('confirmAddDraft');
+    confirmBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Create draft issue using GraphQL
+        const query = `
+            mutation AddProjectV2DraftIssue($projectId: ID!, $title: String!, $body: String) {
+                addProjectV2DraftIssue(input: {
+                    projectId: $projectId
+                    title: $title
+                    body: $body
+                }) {
+                    projectItem {
+                        id
+                    }
+                }
+            }
+        `;
+
+        const response = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: query,
+                variables: {
+                    projectId: currentProject.id,
+                    title: title,
+                    body: body || null
+                }
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.errors) {
+            console.error('GraphQL Error:', result.errors);
+            throw new Error(result.errors[0].message);
+        }
+
+        showStatus('Draft issue added to project!', 'success');
+
+        // Clear form fields
+        document.getElementById('draftTitle').value = '';
+        document.getElementById('draftBody').value = '';
+
+        closeModal('addDraftModal');
+
+        // Reload project issues
+        const projectId = currentProject.id;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await loadProjects();
+        await loadProjectIssues(projectId);
+
+    } catch (error) {
+        console.error('Error adding draft to project:', error);
+        showStatus('Failed to add draft: ' + error.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
+}
+
+// ============================================================================
+// Add Issue to Project
+// ============================================================================
 
 async function addIssueToProject() {
     const repoSelect = document.getElementById('issueRepository');
@@ -2330,8 +2466,7 @@ async function createNewProject() {
 function openEditProjectModal() {
     if (!currentProject) return;
 
-    // Populate the form with current project data
-    document.getElementById('editProjectTitle').value = currentProject.title;
+    // Populate the form with current project data (description and visibility only)
     document.getElementById('editProjectDescription').value = currentProject.shortDescription || '';
 
     // Set the visibility radio button
@@ -2347,14 +2482,8 @@ function openEditProjectModal() {
 async function saveProjectEdits() {
     if (!currentProject) return;
 
-    const newTitle = document.getElementById('editProjectTitle').value.trim();
     const newDescription = document.getElementById('editProjectDescription').value.trim();
     const isPublic = document.getElementById('editProjectPublic').checked;
-
-    if (!newTitle) {
-        showStatus('Please enter a project title', 'error');
-        return;
-    }
 
     const confirmBtn = document.getElementById('confirmEditProject');
     confirmBtn.disabled = true;
@@ -2366,13 +2495,12 @@ async function saveProjectEdits() {
             return;
         }
 
-        // Update project title, description, and visibility
+        // Update project description and visibility (title stays the same)
         const query = `
-            mutation UpdateProject($projectId: ID!, $title: String!, $shortDescription: String, $public: Boolean!) {
+            mutation UpdateProject($projectId: ID!, $shortDescription: String, $public: Boolean!) {
                 updateProjectV2(
                     input: {
                         projectId: $projectId
-                        title: $title
                         shortDescription: $shortDescription
                         public: $public
                     }
@@ -2397,7 +2525,6 @@ async function saveProjectEdits() {
                 query: query,
                 variables: {
                     projectId: currentProject.id,
-                    title: newTitle,
                     shortDescription: newDescription || null,
                     public: isPublic
                 }
@@ -2411,26 +2538,15 @@ async function saveProjectEdits() {
             throw new Error(result.errors[0].message);
         }
 
-        showStatus('Project updated successfully', 'success');
+        showStatus('Project settings updated successfully', 'success');
 
         // Update the local project data
-        currentProject.title = newTitle;
         currentProject.shortDescription = newDescription;
         currentProject.public = isPublic;
-
-        // Update the UI
-        document.getElementById('projectTitle').textContent = newTitle;
-
-        const projectSelect = document.getElementById('projectSelect');
-        const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
-        if (selectedOption) {
-            selectedOption.textContent = newTitle;
-        }
 
         // Update in allProjects array
         const projectIndex = allProjects.data.viewer.projectsV2.nodes.findIndex(p => p.id === currentProject.id);
         if (projectIndex !== -1) {
-            allProjects.data.viewer.projectsV2.nodes[projectIndex].title = newTitle;
             allProjects.data.viewer.projectsV2.nodes[projectIndex].shortDescription = newDescription;
             allProjects.data.viewer.projectsV2.nodes[projectIndex].public = isPublic;
         }
@@ -2755,10 +2871,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('confirmEditProject').addEventListener('click', saveProjectEdits);
 
     // Project actions
-    document.getElementById('addIssueBtn').addEventListener('click', openAddIssueModal);
+    document.getElementById('addIssueBtn').addEventListener('click', openChooseAddTypeModal);
     document.getElementById('editProjectBtn').addEventListener('click', openEditProjectModal);
     document.getElementById('renameProjectBtn').addEventListener('click', openRenameProjectModal);
     document.getElementById('deleteProjectBtn').addEventListener('click', deleteCurrentProject);
+
+    // Choose add type modal
+    document.getElementById('closeChooseAddTypeModal').addEventListener('click', () => closeModal('chooseAddTypeModal'));
+    document.getElementById('chooseAddIssue').addEventListener('click', () => {
+        closeModal('chooseAddTypeModal');
+        openAddIssueModal();
+    });
+    document.getElementById('chooseAddDraft').addEventListener('click', () => {
+        closeModal('chooseAddTypeModal');
+        openAddDraftModal();
+    });
+
+    // Add draft modal
+    document.getElementById('closeAddDraftModal').addEventListener('click', () => closeModal('addDraftModal'));
+    document.getElementById('cancelAddDraft').addEventListener('click', () => closeModal('addDraftModal'));
+    document.getElementById('confirmAddDraft').addEventListener('click', addDraftToProject);
 
     // Close modals on overlay click
     document.querySelectorAll('.modal-overlay').forEach(overlay => {

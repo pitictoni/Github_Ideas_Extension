@@ -131,6 +131,10 @@ body.popout .theme-label {
 	font-size: clamp(14px, 1.2vw, 16px);
 }
 
+body.popout .issues-table-container {
+	max-height: fit-content;
+}
+
 /* Hide popout button when already in popout */
 body.popout #popoutBtn {
 	display: none;
@@ -947,13 +951,13 @@ input:checked+.slider:before {
 }
 
 .gist-quick-actions .btn {
-	flex: 1;
-	padding: 5px;
+	padding: 6px 12px;
+    font-size: 13px;
 }
 
 .project-quick-actions .btn {
-	flex: 1;
-	padding: 5px;
+	padding: 6px 12px;
+    font-size: 13px;
 }
 
 /* Gist Preview */
@@ -1199,6 +1203,141 @@ input:checked+.slider:before {
 /* ============================================================================
    Issue Actions Menu
    ============================================================================ */
+
+.add-type-option {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 16px;
+	margin: 4px;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: all 0.2s;
+	border: 2px solid transparent;
+}
+
+.add-type-option:hover {
+	background-color: var(--bg-secondary);
+	border-color: var(--primary-color);
+}
+
+.add-type-option > svg:first-child {
+	width: 24px;
+	height: 24px;
+	color: var(--primary-color);
+	flex-shrink: 0;
+}
+
+.add-type-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.add-type-title {
+	font-weight: 600;
+	font-size: 14px;
+	color: var(--text-primary);
+}
+
+.add-type-description {
+	font-size: 12px;
+	color: var(--text-secondary);
+	line-height: 1.4;
+}
+
+.add-type-arrow {
+	width: 16px;
+	height: 16px;
+	color: var(--text-secondary);
+	flex-shrink: 0;
+	transition: transform 0.2s;
+}
+
+.add-type-option:hover .add-type-arrow {
+	transform: translateX(4px);
+}
+
+.btn-group {
+	display: inline-flex;
+	position: relative;
+}
+
+.btn-group .btn {
+	border-radius: 0;
+}
+
+.btn-group .btn:first-child {
+	border-top-left-radius: 6px;
+	border-bottom-left-radius: 6px;
+}
+
+.btn-group .btn:last-child {
+	border-top-right-radius: 6px;
+	border-bottom-right-radius: 6px;
+}
+
+.btn-dropdown-toggle {
+	padding: 4px 6px !important;
+	border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.add-issue-dropdown {
+	background: var(--bg-primary);
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	min-width: 200px;
+	display: none;
+	animation: dropdownFadeIn 0.15s ease;
+}
+
+.add-issue-dropdown.show {
+	display: block;
+}
+
+.add-issue-dropdown-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 12px 14px;
+	cursor: pointer;
+	transition: all 0.15s;
+	border-radius: 6px;
+	margin: 4px;
+	color: var(--text-primary);
+}
+
+.add-issue-dropdown-item:hover {
+	background-color: var(--bg-secondary);
+}
+
+.add-issue-dropdown-item svg {
+	width: 16px;
+	height: 16px;
+	color: var(--text-secondary);
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+
+.add-issue-dropdown-item .item-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.add-issue-dropdown-item .item-title {
+	font-weight: 500;
+	font-size: 14px;
+}
+
+.add-issue-dropdown-item .item-description {
+	font-size: 12px;
+	color: var(--text-secondary);
+	line-height: 1.4;
+}
 
 .issue-actions-cell {
 	text-align: center;

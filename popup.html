@@ -130,7 +130,7 @@
                             <h3 id="projectTitle">Project Issues</h3>
                             <div class="project-preview-actions">
                                 <button class="btn btn-primary btn-sm btn-with-tooltip" id="addIssueBtn"
-                                    data-tooltip="Add Issue">
+                                    data-tooltip="Add to Project">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16"
                                         fill="currentColor">
                                         <path
@@ -552,6 +552,49 @@
         </div>
     </div>
 
+    <!-- Choose Add Type Modal -->
+    <div id="chooseAddTypeModal" class="modal-overlay" style="display: none;">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>Add to Project</h3>
+                <button class="modal-close" id="closeChooseAddTypeModal">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 8px;">
+                <div class="add-type-option" id="chooseAddIssue">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" />
+                        <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z" />
+                    </svg>
+                    <div class="add-type-content">
+                        <div class="add-type-title">Create new issue</div>
+                    </div>
+                    <svg class="add-type-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+                        fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z" />
+                    </svg>
+                </div>
+                <div class="add-type-option" id="chooseAddDraft">
+                    <svg focusable="false" aria-label="Draft issue" class="octicon octicon-issue-draft fgColor-draft"
+                        role="img" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block"
+                        overflow="visible" style="vertical-align: text-bottom;">
+                        <path
+                            d="M14.307 11.655a.75.75 0 0 1 .165 1.048 8.05 8.05 0 0 1-1.769 1.77.75.75 0 0 1-.883-1.214 6.552 6.552 0 0 0 1.44-1.439.75.75 0 0 1 1.047-.165Zm-2.652-9.962a.75.75 0 0 1 1.048-.165 8.05 8.05 0 0 1 1.77 1.769.75.75 0 0 1-1.214.883 6.552 6.552 0 0 0-1.439-1.44.75.75 0 0 1-.165-1.047ZM6.749.097a8.074 8.074 0 0 1 2.502 0 .75.75 0 1 1-.233 1.482 6.558 6.558 0 0 0-2.036 0A.751.751 0 0 1 6.749.097ZM.955 6.125a.75.75 0 0 1 .624.857 6.558 6.558 0 0 0 0 2.036.75.75 0 1 1-1.482.233 8.074 8.074 0 0 1 0-2.502.75.75 0 0 1 .858-.624Zm14.09 0a.75.75 0 0 1 .858.624c.13.829.13 1.673 0 2.502a.75.75 0 1 1-1.482-.233 6.558 6.558 0 0 0 0-2.036.75.75 0 0 1 .624-.857Zm-8.92 8.92a.75.75 0 0 1 .857-.624 6.558 6.558 0 0 0 2.036 0 .75.75 0 1 1 .233 1.482c-.829.13-1.673.13-2.502 0a.75.75 0 0 1-.624-.858Zm-4.432-3.39a.75.75 0 0 1 1.048.165 6.552 6.552 0 0 0 1.439 1.44.751.751 0 0 1-.883 1.212 8.05 8.05 0 0 1-1.77-1.769.75.75 0 0 1 .166-1.048Zm2.652-9.962A.75.75 0 0 1 4.18 2.74a6.556 6.556 0 0 0-1.44 1.44.751.751 0 0 1-1.212-.883 8.05 8.05 0 0 1 1.769-1.77.75.75 0 0 1 1.048.166Z">
+                        </path>
+                    </svg>
+                    <div class="add-type-content">
+                        <div class="add-type-title">Create new draft</div>
+                    </div>
+                    <svg class="add-type-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+                        fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z" />
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Issue Modal -->
     <div id="addIssueModal" class="modal-overlay" style="display: none;">
         <div class="modal">
@@ -587,6 +630,39 @@
                             d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z" />
                     </svg>
                     Add to Project
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Draft Issue Modal -->
+    <div id="addDraftModal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Add Draft to Project</h3>
+                <button class="modal-close" id="closeAddDraftModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="editor-section">
+                    <label for="draftTitle" class="section-label">DRAFT TITLE</label>
+                    <input id="draftTitle" class="input" type="text" placeholder="Enter draft title" />
+                </div>
+
+                <div class="editor-section">
+                    <label for="draftBody" class="section-label">DESCRIPTION (Optional)</label>
+                    <textarea id="draftBody" class="textarea gist-textarea" placeholder="Describe the draft issue..."
+                        rows="6"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelAddDraft">Cancel</button>
+                <button class="btn btn-primary" id="confirmAddDraft">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"
+                        fill="currentColor">
+                        <path
+                            d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z" />
+                    </svg>
+                    Add Draft
                 </button>
             </div>
         </div>
@@ -669,15 +745,10 @@
     <div id="editProjectModal" class="modal-overlay" style="display: none;">
         <div class="modal modal-sm">
             <div class="modal-header">
-                <h3>Edit Project</h3>
+                <h3>Edit Project Settings</h3>
                 <button class="modal-close" id="closeEditProjectModal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="editor-section">
-                    <label for="editProjectTitle" class="section-label">PROJECT TITLE</label>
-                    <input id="editProjectTitle" class="input" type="text" placeholder="Enter project title" />
-                </div>
-
                 <div class="editor-section">
                     <label for="editProjectDescription" class="section-label">DESCRIPTION</label>
                     <textarea id="editProjectDescription" class="textarea gist-textarea"
@@ -689,19 +760,15 @@
                     <div style="display: flex; gap: 12px; margin-top: 8px;">
                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                             <input type="radio" name="projectVisibility" value="private" id="editProjectPrivate" checked
-                                style="cursor: pointer;">
-                            <span>🔒 Private</span>
+                                style="cursor: pointer; transform: scale(1.5);">
+                            <span>Private</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                             <input type="radio" name="projectVisibility" value="public" id="editProjectPublic"
-                                style="cursor: pointer;">
-                            <span>🌐 Public</span>
+                                style="cursor: pointer; transform: scale(1.5);">
+                            <span>Public</span>
                         </label>
                     </div>
-                    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-                        Public projects are visible to anyone. Private projects are only visible to you and
-                        collaborators.
-                    </p>
                 </div>
             </div>
             <div class="modal-footer">
