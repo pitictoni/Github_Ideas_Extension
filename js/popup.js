@@ -417,190 +417,134 @@ async function fetchGistById(token, gistId) {
     return await response.json();
 }
 
+// Step 1: Lightweight query — only fetches project list + fields (no items)
 async function fetchProjects(token) {
     const query = `
-                query GetAllAccessibleProjectsWithFullDetails {
-                viewer {
-                    login
-                    name
-                    # User's personal projects with full details
-                    projectsV2(first: 50) {
-                        nodes {
-                            id
-                            title
-                            url
-                            shortDescription
-                            public
-                            closed
-                            createdAt
-                            updatedAt
-                            owner {
-                                ... on User {
-                                    login
-                                    name
+        query GetProjectList {
+            viewer {
+                login
+                name
+                projectsV2(first: 50) {
+                    nodes {
+                        id
+                        title
+                        url
+                        shortDescription
+                        public
+                        closed
+                        createdAt
+                        updatedAt
+                        owner {
+                            ... on User { login name }
+                            ... on Organization { login name }
+                        }
+                        fields(first: 20) {
+                            nodes {
+                                ... on ProjectV2Field {
+                                    id name dataType
                                 }
-                                ... on Organization {
-                                    login
-                                    name
+                                ... on ProjectV2SingleSelectField {
+                                    id name dataType
+                                    options { id name color description }
                                 }
-                            }
-                            # ADD THIS: Field definitions with Status options and colors
-                            fields(first: 20) {
-                                nodes {
-                                    ... on ProjectV2Field {
-                                        id
-                                        name
-                                        dataType
-                                    }
-                                    ... on ProjectV2SingleSelectField {
-                                        id
-                                        name
-                                        dataType
-                                        options {
-                                            id
-                                            name
-                                            color
-                                            description
-                                        }
-                                    }
-                                    ... on ProjectV2IterationField {
-                                        id
-                                        name
-                                        dataType
-                                        configuration {
-                                            iterations {
-                                                id
-                                                title
-                                                startDate
-                                                duration
-                                            }
-                                        }
+                                ... on ProjectV2IterationField {
+                                    id name dataType
+                                    configuration {
+                                        iterations { id title startDate duration }
                                     }
                                 }
                             }
-                            items(first: 100) {
-                                totalCount
-                                nodes {
-                                    id
-                                    type
-                                    fieldValues(first: 20) {
-                                        nodes {
-                                            ... on ProjectV2ItemFieldTextValue {
-                                                text
-                                                field {
-                                                    ... on ProjectV2FieldCommon {
-                                                        name
-                                                    }
-                                                }
-                                            }
-                                            ... on ProjectV2ItemFieldNumberValue {
-                                                number
-                                                field {
-                                                    ... on ProjectV2FieldCommon {
-                                                        name
-                                                    }
-                                                }
-                                            }
-                                            ... on ProjectV2ItemFieldDateValue {
-                                                date
-                                                field {
-                                                    ... on ProjectV2FieldCommon {
-                                                        name
-                                                    }
-                                                }
-                                            }
-                                            ... on ProjectV2ItemFieldSingleSelectValue {
-                                                name
-                                                color
-                                                # ADD THIS: optionId to match with field definitions
-                                                optionId
-                                                field {
-                                                    ... on ProjectV2FieldCommon {
-                                                        name
-                                                    }
-                                                }
-                                            }
-                                            ... on ProjectV2ItemFieldIterationValue {
-                                                title
-                                                startDate
-                                                duration
-                                                field {
-                                                    ... on ProjectV2FieldCommon {
-                                                        name
-                                                    }
-                                                }
-                                            }
+                        }
+                    }
+                }
+            }
+        }
+    `;
+
+    const response = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/vnd.github+json"
+        },
+        body: JSON.stringify({ query })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch projects');
+    }
+
+    return await response.json();
+}
+
+// Step 2: On-demand query — fetches items only for the selected project
+// Cache to avoid re-fetching when switching between projects
+const projectItemsCache = {};
+
+async function fetchProjectItems(token, projectId) {
+    // Return cached items if available
+    if (projectItemsCache[projectId]) {
+        return projectItemsCache[projectId];
+    }
+
+    let allItems = [];
+    let cursor = null;
+    let hasNextPage = true;
+
+    while (hasNextPage) {
+        const query = `
+            query GetProjectItems($projectId: ID!, $cursor: String) {
+                node(id: $projectId) {
+                    ... on ProjectV2 {
+                        items(first: 100, after: $cursor) {
+                            totalCount
+                            pageInfo { hasNextPage endCursor }
+                            nodes {
+                                id
+                                type
+                                fieldValues(first: 20) {
+                                    nodes {
+                                        ... on ProjectV2ItemFieldTextValue {
+                                            text
+                                            field { ... on ProjectV2FieldCommon { name } }
+                                        }
+                                        ... on ProjectV2ItemFieldNumberValue {
+                                            number
+                                            field { ... on ProjectV2FieldCommon { name } }
+                                        }
+                                        ... on ProjectV2ItemFieldDateValue {
+                                            date
+                                            field { ... on ProjectV2FieldCommon { name } }
+                                        }
+                                        ... on ProjectV2ItemFieldSingleSelectValue {
+                                            name color optionId
+                                            field { ... on ProjectV2FieldCommon { name } }
+                                        }
+                                        ... on ProjectV2ItemFieldIterationValue {
+                                            title startDate duration
+                                            field { ... on ProjectV2FieldCommon { name } }
                                         }
                                     }
-                                    content {
-                                        ... on Issue {
-                                            id
-                                            title
-                                            number
-                                            state
-                                            url
-                                            body
-                                            createdAt
-                                            updatedAt
-                                            closedAt
-                                            repository {
-                                                name
-                                                nameWithOwner
-                                                owner {
-                                                    login
-                                                }
-                                            }
-                                            author {
-                                                login
-                                                avatarUrl
-                                            }
-                                            labels(first: 10) {
-                                                nodes {
-                                                    name
-                                                    color
-                                                }
-                                            }
-                                            assignees(first: 10) {
-                                                nodes {
-                                                    login
-                                                    name
-                                                    avatarUrl
-                                                }
-                                            }
-                                            milestone {
-                                                title
-                                                dueOn
-                                            }
-                                        }
-                                        ... on PullRequest {
-                                            id
-                                            title
-                                            number
-                                            state
-                                            url
-                                            body
-                                            createdAt
-                                            updatedAt
-                                            closedAt
-                                            mergedAt
-                                            repository {
-                                                name
-                                                nameWithOwner
-                                                owner {
-                                                    login
-                                                }
-                                            }
-                                            author {
-                                                login
-                                                avatarUrl
-                                            }
-                                        }
-                                        ... on DraftIssue {
-                                            id
-                                            title
-                                            body
-                                            createdAt
-                                        }
+                                }
+                                content {
+                                    ... on Issue {
+                                        id title number state url
+                                        createdAt updatedAt closedAt
+                                        repository { name nameWithOwner owner { login } }
+                                        author { login }
+                                        labels(first: 10) { nodes { name color } }
+                                        assignees(first: 10) { nodes { login name } }
+                                        milestone { title dueOn }
+                                    }
+                                    ... on PullRequest {
+                                        id title number state url
+                                        createdAt updatedAt closedAt mergedAt
+                                        repository { name nameWithOwner owner { login } }
+                                        author { login }
+                                    }
+                                    ... on DraftIssue {
+                                        id title createdAt
                                     }
                                 }
                             }
@@ -609,24 +553,40 @@ async function fetchProjects(token) {
                 }
             }
         `;
-    const response = await fetch("https://api.github.com/graphql", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "Accept": "application/vnd.github+json"
-        },
-        body: JSON.stringify({
-            query: query
-        })
-    })
 
-    if (!response.ok) {
-        throw new Error('Failed to fetch project columns');
+        const response = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/vnd.github+json"
+            },
+            body: JSON.stringify({ query, variables: { projectId, cursor } })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch project items');
+        }
+
+        const result = await response.json();
+        const itemsData = result.data?.node?.items;
+        if (!itemsData) break;
+
+        allItems = allItems.concat(itemsData.nodes);
+        hasNextPage = itemsData.pageInfo.hasNextPage;
+        cursor = itemsData.pageInfo.endCursor;
     }
 
-    return await response.json();
+    // Cache the result
+    projectItemsCache[projectId] = allItems;
+    return allItems;
 }
+
+// Call this after any mutation that changes project items (add/remove/convert)
+function invalidateProjectCache(projectId) {
+    delete projectItemsCache[projectId];
+}
+
 
 // ============================================================================
 // Modal Management
@@ -1257,10 +1217,11 @@ async function loadProjectIssues(projectId) {
         const viewBtn = document.getElementById('viewProjectBtn');
         viewBtn.onclick = () => window.open(project.url, '_blank');
 
-        const columns = project.items;
+        // Fetch items on-demand (cached after first load)
+        const items = await fetchProjectItems(tokenData.access_token, projectId);
         const allCards = [];
 
-        columns.nodes.forEach(item => {
+        items.forEach(item => {
             if (item.content) {
                 // Find the "Status" field value with color
                 let statusName = 'No Status';
@@ -1583,7 +1544,7 @@ async function convertDraftToIssue() {
         // Reload project
         const projectId = currentProject.id;
         await new Promise(resolve => setTimeout(resolve, 1000));
-        await loadProjects();
+        invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
     } catch (error) {
@@ -1789,7 +1750,7 @@ async function removeIssueFromProject(itemId) {
         showStatus('Issue removed from project', 'success');
 
         // Reload the project issues
-        await loadProjects();
+        invalidateProjectCache(currentProject.id);
         await loadProjectIssues(currentProject.id);
 
     } catch (error) {
@@ -1876,8 +1837,8 @@ async function deleteIssueCompletely(issueUrl, issueTitle) {
         showStatus('Issue deleted permanently', 'success');
 
         // Reload the project issues
-        await loadProjects();
         if (currentProject) {
+            invalidateProjectCache(currentProject.id);
             await loadProjectIssues(currentProject.id);
         }
 
@@ -2275,7 +2236,7 @@ async function addDraftToProject() {
         // Reload project issues
         const projectId = currentProject.id;
         await new Promise(resolve => setTimeout(resolve, 1000));
-        await loadProjects();
+        invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
     } catch (error) {
@@ -2384,7 +2345,7 @@ async function addIssueToProject() {
 
         const projectId = currentProject.id;
         await new Promise(resolve => setTimeout(resolve, 1000));
-        await loadProjects();
+        invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
     } catch (error) {
