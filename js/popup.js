@@ -1,6 +1,6 @@
 const CONFIG = {
-    GITHUB_CLIENT_ID: '',
-    BACKEND_URL: '',
+    GITHUB_CLIENT_ID: 'Ov23liqJaw3AaJpiq0A6',
+    BACKEND_URL: 'https://github-oauth-worker.iopy.workers.dev',
     REDIRECT_URI: chrome.identity.getRedirectURL()
 };
 
@@ -314,7 +314,6 @@ async function fetchGitHubUser(token) {
         await clearStoredToken();
         throw new Error('Token expired or invalid');
     }
-
 
     // Rate limited
     if (response.status === 403) {
@@ -1277,6 +1276,7 @@ async function loadProjectIssues(projectId) {
                 allCards.push({
                     itemId: item.id,
                     title: item.content.title,
+                    body: item.content.body || '',
                     status: statusName,
                     statusColor: statusColor,
                     url: item.content.url,
@@ -1360,7 +1360,7 @@ function displayProjectIssues(issues) {
                     ${statusBadge}
                 </td>
                 <td class="issue-actions-cell">
-                    <button class="issue-actions-btn" data-issue-id="${issue.itemId}" data-issue-url="${issue.url || ''}" data-issue-title="${issue.title}" data-issue-type="DRAFT">
+                    <button class="issue-actions-btn" data-issue-id="${issue.itemId}" data-issue-url="${issue.url || ''}" data-issue-title="${issue.title}" data-issue-body="${encodeURIComponent(issue.body || '')}" data-issue-type="DRAFT">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
                         </svg>
@@ -1425,8 +1425,177 @@ function hideProjectIssues() {
 }
 
 // ============================================================================
-// Status Change Dropdown
+// Convert Draft to Issue
 // ============================================================================
+
+let convertDraftItemId = null;
+
+async function openConvertDraftModal(itemId, title, body) {
+    if (!currentProject) return;
+
+    convertDraftItemId = itemId;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        if (userRepositories.length === 0) {
+            showStatus('Loading repositories...', 'info');
+            userRepositories = await fetchUserRepositories(tokenData.access_token);
+        }
+
+        const repoSelect = document.getElementById('convertDraftRepository');
+        repoSelect.innerHTML = '<option value="" disabled selected>Select a repository</option>';
+
+        userRepositories.forEach(repo => {
+            const option = document.createElement('option');
+            option.value = repo.full_name;
+            option.textContent = repo.full_name;
+            option.dataset.owner = repo.owner.login;
+            option.dataset.name = repo.name;
+            repoSelect.appendChild(option);
+        });
+
+        document.getElementById('convertDraftTitle').value = title || '';
+        document.getElementById('convertDraftBody').value = body || '';
+
+        openModal('convertDraftModal');
+
+    } catch (error) {
+        console.error('Error opening convert draft modal:', error);
+        showStatus('Failed to load repositories: ' + error.message, 'error');
+    }
+}
+
+async function convertDraftToIssue() {
+    const repoSelect = document.getElementById('convertDraftRepository');
+    const selectedOption = repoSelect.options[repoSelect.selectedIndex];
+    const title = document.getElementById('convertDraftTitle').value.trim();
+    const body = document.getElementById('convertDraftBody').value.trim();
+
+    if (!repoSelect.value) {
+        showStatus('Please select a repository', 'error');
+        return;
+    }
+    if (!title) {
+        showStatus('Please enter an issue title', 'error');
+        return;
+    }
+
+    const owner = selectedOption.dataset.owner;
+    const repoName = selectedOption.dataset.name;
+
+    const confirmBtn = document.getElementById('confirmConvertDraft');
+    confirmBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Step 1: Create the GitHub issue via REST API
+        const issueResponse = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${tokenData.access_token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ title, body: body || '' })
+        });
+
+        if (!issueResponse.ok) {
+            const err = await issueResponse.json();
+            throw new Error(err.message || 'Failed to create issue');
+        }
+
+        const newIssue = await issueResponse.json();
+
+        // Step 2: Add the new issue to the project
+        const addMutation = `
+            mutation AddIssueToProject($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: {
+                    projectId: $projectId
+                    contentId: $contentId
+                }) {
+                    item {
+                        id
+                    }
+                }
+            }
+        `;
+
+        const addResponse = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: addMutation,
+                variables: {
+                    projectId: currentProject.id,
+                    contentId: newIssue.node_id
+                }
+            })
+        });
+
+        const addResult = await addResponse.json();
+        if (addResult.errors) {
+            throw new Error(addResult.errors[0].message);
+        }
+
+        // Step 3: Remove the original draft from the project
+        const removeMutation = `
+            mutation DeleteProjectV2Item($projectId: ID!, $itemId: ID!) {
+                deleteProjectV2Item(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                }) {
+                    deletedItemId
+                }
+            }
+        `;
+
+        await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${tokenData.access_token}`,
+            },
+            body: JSON.stringify({
+                query: removeMutation,
+                variables: {
+                    projectId: currentProject.id,
+                    itemId: convertDraftItemId
+                }
+            })
+        });
+
+        showStatus('Draft converted to issue successfully!', 'success');
+        closeModal('convertDraftModal');
+
+        // Reload project
+        const projectId = currentProject.id;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await loadProjects();
+        await loadProjectIssues(projectId);
+
+    } catch (error) {
+        console.error('Error converting draft to issue:', error);
+        showStatus('Failed to convert draft: ' + error.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
+}
+
+// ============================================================================
+
 
 let currentIssueData = null;
 
@@ -1439,9 +1608,10 @@ function showIssueActionsMenu(button) {
     const issueTitle = button.getAttribute('data-issue-title');
     const issueType = button.getAttribute('data-issue-type');
     const issueRepo = button.getAttribute('data-issue-repo');
+    const issueBody = decodeURIComponent(button.getAttribute('data-issue-body') || '');
 
     // Store current issue data
-    currentIssueData = { issueId, issueUrl, issueTitle, issueType, issueRepo };
+    currentIssueData = { issueId, issueUrl, issueTitle, issueType, issueRepo, issueBody };
 
     // Create menu
     const menu = document.createElement('div');
@@ -1475,6 +1645,24 @@ function showIssueActionsMenu(button) {
         removeIssueFromProject(issueId);
     });
     menu.appendChild(removeItem);
+
+    // Convert to Issue (only for drafts)
+    if (issueType === 'DRAFT') {
+        const convertItem = document.createElement('div');
+        convertItem.className = 'issue-actions-menu-item';
+        convertItem.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
+                <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z"/>
+            </svg>
+            Convert to Issue
+        `;
+        convertItem.addEventListener('click', () => {
+            closeIssueActionsMenu();
+            openConvertDraftModal(issueId, issueTitle, issueBody);
+        });
+        menu.appendChild(convertItem);
+    }
 
     // Delete issue (only for actual issues, not drafts, and if we have repository info)
     if (issueType === 'ISSUE' && issueUrl) {
@@ -2011,11 +2199,11 @@ function openChooseAddTypeModal() {
 
 function openAddDraftModal() {
     if (!currentProject) return;
-    
+
     // Clear form fields
     document.getElementById('draftTitle').value = '';
     document.getElementById('draftBody').value = '';
-    
+
     openModal('addDraftModal');
 }
 
@@ -2891,6 +3079,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeAddDraftModal').addEventListener('click', () => closeModal('addDraftModal'));
     document.getElementById('cancelAddDraft').addEventListener('click', () => closeModal('addDraftModal'));
     document.getElementById('confirmAddDraft').addEventListener('click', addDraftToProject);
+
+    // Convert draft to issue modal
+    document.getElementById('closeConvertDraftModal').addEventListener('click', () => closeModal('convertDraftModal'));
+    document.getElementById('cancelConvertDraft').addEventListener('click', () => closeModal('convertDraftModal'));
+    document.getElementById('confirmConvertDraft').addEventListener('click', convertDraftToIssue);
 
     // Close modals on overlay click
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
