@@ -627,8 +627,9 @@ async function loadGists() {
 
         const firstFilename = Object.keys(gist.files)[0];
         const displayName = gist.description || firstFilename || 'Untitled Gist';
+        const visibilityLabel = gist.public ? '[Public]' : '[Secret]';
 
-        option.textContent = displayName;
+        option.textContent = `${visibilityLabel} ${displayName}`;
         gistSelect.appendChild(option);
     });
 }
@@ -1190,7 +1191,8 @@ async function loadProjects() {
 
             const option = document.createElement('option');
             option.value = project.id;
-            option.textContent = project.title;
+            const visibilityLabel = project.public ? '[Public]' : '[Private]';
+            option.textContent = `${visibilityLabel} ${project.title}`;
             option.dataset.url = project.url;
             projectSelect.appendChild(option);
         });
@@ -2855,6 +2857,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('avatarWrapper').style.display = 'none';
             hideGistPreview();
             showStatus('Logged out successfully', 'info');
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Login with GitHub';
         }
     });
 
