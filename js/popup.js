@@ -1422,6 +1422,18 @@ async function openConvertDraftModal(itemId, title, body) {
             repoSelect.appendChild(option);
         });
 
+        // Populate target project dropdown — all projects including current
+        const targetSel = document.getElementById('convertDraftTargetProject');
+        targetSel.innerHTML = '<option value="">Keep in current project</option>';
+        if (allProjects && allProjects.data) {
+            allProjects.data.viewer.projectsV2.nodes.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.title + (p.id === currentProject.id ? ' (current)' : '');
+                targetSel.appendChild(opt);
+            });
+        }
+
         document.getElementById('convertDraftTitle').value = title || '';
         document.getElementById('convertDraftBody').value = body || '';
 
@@ -1479,7 +1491,11 @@ async function convertDraftToIssue() {
 
         const newIssue = await issueResponse.json();
 
-        // Step 2: Add the new issue to the project
+        // Determine target project — use selected or fall back to current
+        const targetProjectSel = document.getElementById('convertDraftTargetProject');
+        const targetProjectId = targetProjectSel.value || currentProject.id;
+
+        // Step 2: Add the new issue to the target project
         const addMutation = `
             mutation AddIssueToProject($projectId: ID!, $contentId: ID!) {
                 addProjectV2ItemById(input: {
@@ -1502,7 +1518,7 @@ async function convertDraftToIssue() {
             body: JSON.stringify({
                 query: addMutation,
                 variables: {
-                    projectId: currentProject.id,
+                    projectId: targetProjectId,
                     contentId: newIssue.node_id
                 }
             })
@@ -1540,7 +1556,10 @@ async function convertDraftToIssue() {
             })
         });
 
-        showStatus('Draft converted to issue successfully!', 'success');
+        const targetName = targetProjectSel.value
+            ? targetProjectSel.options[targetProjectSel.selectedIndex].textContent.replace(' (current)', '')
+            : currentProject.title;
+        showStatus(`Draft converted to issue in "${targetName}"!`, 'success');
         closeModal('convertDraftModal');
 
         // Reload project
@@ -1627,6 +1646,21 @@ function showIssueActionsMenu(button) {
         menu.appendChild(convertItem);
     }
 
+    // Move to Project (for both drafts and real issues)
+    const moveItem = document.createElement('div');
+    moveItem.className = 'issue-actions-menu-item';
+    moveItem.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+        </svg>
+        Move to Project
+    `;
+    moveItem.addEventListener('click', () => {
+        closeIssueActionsMenu();
+        openMoveToProjectModal(issueId, issueTitle, issueType);
+    });
+    menu.appendChild(moveItem);
+
     // Delete issue (only for actual issues, not drafts, and if we have repository info)
     if (issueType === 'ISSUE' && issueUrl) {
         const deleteItem = document.createElement('div');
@@ -1698,6 +1732,149 @@ function showIssueActionsMenu(button) {
 function closeIssueActionsMenu() {
     document.querySelectorAll('.issue-actions-menu').forEach(menu => menu.remove());
     document.removeEventListener('click', closeIssueActionsMenu);
+}
+
+// ============================================================================
+// Move to Project
+// ============================================================================
+
+let moveItemId = null;
+let moveItemType = null;
+
+function openMoveToProjectModal(itemId, itemTitle, itemType) {
+    moveItemId = itemId;
+    moveItemType = itemType;
+
+    // Populate project list — exclude current project
+    const sel = document.getElementById('moveToProjectSelect');
+    sel.innerHTML = '<option value="" disabled selected>Choose a project...</option>';
+
+    if (allProjects && allProjects.data) {
+        allProjects.data.viewer.projectsV2.nodes
+            .filter(p => p.id !== currentProject.id)
+            .forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.title;
+                sel.appendChild(opt);
+            });
+    }
+
+    const typeLabel = itemType === 'DRAFT' ? 'draft issue' : 'issue';
+    document.getElementById('moveToProjectDesc').textContent =
+        `Move "${itemTitle}" from "${currentProject.title}" to another project.`;
+
+    openModal('moveToProjectModal');
+}
+
+async function moveToProject() {
+    const sel = document.getElementById('moveToProjectSelect');
+    const targetProjectId = sel.value;
+
+    if (!targetProjectId) {
+        showStatus('Please select a target project', 'error');
+        return;
+    }
+
+    const confirmBtn = document.getElementById('confirmMoveToProject');
+    confirmBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        // Step 1: Copy item to target project
+        const copyMutation = `
+            mutation CopyItem($projectId: ID!, $itemId: ID!) {
+                copyProjectV2Item(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    targetProjectId: $projectId
+                }) {
+                    item { id }
+                }
+            }
+        `;
+
+        // GitHub doesn't have copyProjectV2Item yet for cross-project —
+        // use addProjectV2Item for real issues, or addProjectV2DraftIssue for drafts
+
+        if (moveItemType === 'DRAFT') {
+            // For drafts: read the title from the table row, create a new draft in target project
+            const titleEl = document.querySelector(`[data-issue-id="${moveItemId}"]`)
+                ?.closest('tr')?.querySelector('.issue-title');
+            const title = titleEl?.textContent?.trim() || 'Untitled';
+
+            const draftMutation = `
+                mutation AddDraft($projectId: ID!, $title: String!) {
+                    addProjectV2DraftIssue(input: { projectId: $projectId, title: $title }) {
+                        projectItem { id }
+                    }
+                }
+            `;
+            const draftRes = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenData.access_token}` },
+                body: JSON.stringify({ query: draftMutation, variables: { projectId: targetProjectId, title } })
+            });
+            const draftResult = await draftRes.json();
+            if (draftResult.errors) throw new Error(draftResult.errors[0].message);
+
+        } else {
+            // For real issues: get the content node ID from the current project items cache
+            const cached = projectItemsCache[currentProject.id];
+            const item = cached?.find(i => i.id === moveItemId);
+            if (!item || !item.content?.id) throw new Error('Could not find issue node ID');
+
+            const addMutation = `
+                mutation AddIssue($projectId: ID!, $contentId: ID!) {
+                    addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                        item { id }
+                    }
+                }
+            `;
+            const addRes = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenData.access_token}` },
+                body: JSON.stringify({ query: addMutation, variables: { projectId: targetProjectId, contentId: item.content.id } })
+            });
+            const addResult = await addRes.json();
+            if (addResult.errors) throw new Error(addResult.errors[0].message);
+        }
+
+        // Step 2: Remove from current project
+        const removeMutation = `
+            mutation RemoveItem($projectId: ID!, $itemId: ID!) {
+                deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+                    deletedItemId
+                }
+            }
+        `;
+        await fetch('https://api.github.com/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenData.access_token}` },
+            body: JSON.stringify({ query: removeMutation, variables: { projectId: currentProject.id, itemId: moveItemId } })
+        });
+
+        const targetName = sel.options[sel.selectedIndex].textContent;
+        showStatus(`Moved to "${targetName}" successfully`, 'success');
+        closeModal('moveToProjectModal');
+
+        // Reload current project
+        const projectId = currentProject.id;
+        await new Promise(resolve => setTimeout(resolve, 800));
+        invalidateProjectCache(projectId);
+        await loadProjectIssues(projectId);
+
+    } catch (err) {
+        console.error('Move error:', err);
+        showStatus('Failed to move: ' + err.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
 }
 
 async function removeIssueFromProject(itemId) {
@@ -2789,12 +2966,281 @@ async function deleteCurrentProject() {
 // Initialization
 // ============================================================================
 
+
+// ============================================================================
+// Quick Capture — Inbox Project
+// ============================================================================
+
+const INBOX_STORAGE_KEY = 'quickCaptureInboxProject'; // { id, title }
+
+async function getInboxProject() {
+    const result = await chrome.storage.local.get([INBOX_STORAGE_KEY]);
+    return result[INBOX_STORAGE_KEY] || null;
+}
+
+async function setInboxProject(id, title) {
+    await chrome.storage.local.set({ [INBOX_STORAGE_KEY]: { id, title } });
+}
+
+async function initQuickCapture() {
+    const inbox = await getInboxProject();
+    const label = document.getElementById('qcInboxLabel');
+
+    if (inbox) {
+        // Verify the stored title is still accurate — project may have been renamed
+        if (allProjects && allProjects.data) {
+            const live = allProjects.data.viewer.projectsV2.nodes.find(p => p.id === inbox.id);
+            if (live && live.title !== inbox.title) {
+                // Silently update the stored title to match GitHub
+                await setInboxProject(inbox.id, live.title);
+                inbox.title = live.title;
+            }
+        }
+        label.textContent = inbox.title;
+    } else {
+        label.textContent = 'Set inbox →';
+        // Only prompt if quick capture is actually enabled
+        const result2 = await chrome.storage.local.get(['quickCaptureEnabled']);
+        const enabled = result2.quickCaptureEnabled !== false;
+        if (enabled) setTimeout(() => openInboxSetupModal(), 600);
+    }
+
+    // Restore enabled/disabled preference
+    const result = await chrome.storage.local.get(['quickCaptureEnabled']);
+    const enabled = result.quickCaptureEnabled !== false; // default true
+    const toggle = document.getElementById('qcToggle');
+    const bar = document.getElementById('quickCaptureBar');
+
+    toggle.checked = enabled;
+    bar.classList.toggle('qc-collapsed', !enabled);
+
+    toggle.addEventListener('change', async () => {
+        const on = toggle.checked;
+        bar.classList.toggle('qc-collapsed', !on);
+        await chrome.storage.local.set({ quickCaptureEnabled: on });
+    });
+}
+
+function openInboxSetupModal() {
+    // Populate the project select with current allProjects
+    const sel = document.getElementById('inboxProjectSelect');
+    sel.innerHTML = '<option value="" disabled selected>Choose a project...</option>';
+
+    if (allProjects && allProjects.data) {
+        allProjects.data.viewer.projectsV2.nodes.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.title;
+            sel.appendChild(opt);
+        });
+    }
+
+    // Clear new project input
+    document.getElementById('inboxNewProjectName').value = '';
+
+    openModal('inboxSetupModal');
+}
+
+async function saveInboxSetup() {
+    const sel = document.getElementById('inboxProjectSelect');
+    const newName = document.getElementById('inboxNewProjectName').value.trim();
+    const confirmBtn = document.getElementById('confirmInboxSetup');
+
+    if (!sel.value && !newName) {
+        showStatus('Pick a project or enter a name for a new one', 'error');
+        return;
+    }
+
+    confirmBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        let inboxId, inboxTitle;
+
+        if (newName) {
+            // Create a new project via GraphQL
+            const login = (await fetchGitHubUser(tokenData.access_token)).login;
+            const mutation = `
+                mutation CreateProject($ownerId: ID!, $title: String!) {
+                    createProjectV2(input: { ownerId: $ownerId, title: $title }) {
+                        projectV2 { id title }
+                    }
+                }
+            `;
+            // Get owner node ID first
+            const userQuery = `query { viewer { id } }`;
+            const userRes = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenData.access_token}` },
+                body: JSON.stringify({ query: userQuery })
+            });
+            const userData = await userRes.json();
+            const ownerId = userData.data.viewer.id;
+
+            const res = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenData.access_token}` },
+                body: JSON.stringify({ query: mutation, variables: { ownerId, title: newName } })
+            });
+            const result = await res.json();
+            if (result.errors) throw new Error(result.errors[0].message);
+
+            inboxId = result.data.createProjectV2.projectV2.id;
+            inboxTitle = result.data.createProjectV2.projectV2.title;
+
+            // Reload projects list so it shows up
+            await loadProjects();
+        } else {
+            inboxId = sel.value;
+            inboxTitle = sel.options[sel.selectedIndex].textContent;
+        }
+
+        await setInboxProject(inboxId, inboxTitle);
+        document.getElementById('qcInboxLabel').textContent = inboxTitle;
+        closeModal('inboxSetupModal');
+        showStatus(`Inbox set to "${inboxTitle}"`, 'success');
+
+    } catch (err) {
+        console.error('Error setting inbox:', err);
+        showStatus('Failed: ' + err.message, 'error');
+    } finally {
+        confirmBtn.disabled = false;
+    }
+}
+
+async function quickCaptureSave() {
+    const textarea = document.getElementById('qcTextarea');
+    const text = textarea.value.trim();
+
+    if (!text) {
+        textarea.focus();
+        return;
+    }
+
+    const inbox = await getInboxProject();
+    if (!inbox) {
+        openInboxSetupModal();
+        return;
+    }
+
+    const saveBtn = document.getElementById('qcSaveBtn');
+    saveBtn.disabled = true;
+
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData || !tokenData.access_token) {
+            showStatus('Not authenticated', 'error');
+            return;
+        }
+
+        const mutation = `
+            mutation AddDraft($projectId: ID!, $title: String!) {
+                addProjectV2DraftIssue(input: { projectId: $projectId, title: $title }) {
+                    projectItem { id }
+                }
+            }
+        `;
+
+        const res = await fetch('https://api.github.com/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenData.access_token}` },
+            body: JSON.stringify({ query: mutation, variables: { projectId: inbox.id, title: text } })
+        });
+
+        const result = await res.json();
+        if (result.errors) throw new Error(result.errors[0].message);
+
+        // Clear and give success feedback
+        textarea.value = '';
+        textarea.style.height = 'auto';
+
+        saveBtn.style.background = '#22c55e';
+        saveBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+            </svg>
+            Saved!
+        `;
+        setTimeout(() => {
+            saveBtn.style.background = '';
+            saveBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+                </svg>
+                Save
+            `;
+            saveBtn.disabled = false;
+        }, 1500);
+
+        // Invalidate cache if inbox is currently viewed project
+        if (currentProject && currentProject.id === inbox.id) {
+            invalidateProjectCache(inbox.id);
+            await loadProjectIssues(inbox.id);
+        }
+
+    } catch (err) {
+        console.error('Quick capture error:', err);
+
+        // Detect if the inbox project no longer exists on GitHub
+        const isGone = err.message && (
+            err.message.toLowerCase().includes('could not resolve to a node') ||
+            err.message.toLowerCase().includes('not found') ||
+            err.message.toLowerCase().includes('does not exist')
+        );
+
+        if (isGone) {
+            // Clear the stale inbox reference and prompt the user to pick a new one
+            await chrome.storage.local.remove([INBOX_STORAGE_KEY]);
+            document.getElementById('qcInboxLabel').textContent = 'Set inbox →';
+            showStatus('Inbox project was deleted — please set a new one', 'error');
+            setTimeout(() => openInboxSetupModal(), 800);
+        } else {
+            showStatus('Failed to save: ' + err.message, 'error');
+        }
+
+        saveBtn.disabled = false;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Check if we're in a popout window
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('popout') === 'true') {
         document.body.classList.add('popout');
     }
+
+    // ── Quick Capture listeners ──
+    const qcTextarea = document.getElementById('qcTextarea');
+    const qcSaveBtn = document.getElementById('qcSaveBtn');
+
+    // Auto-resize textarea
+    qcTextarea.addEventListener('input', () => {
+        qcTextarea.style.height = 'auto';
+        qcTextarea.style.height = Math.min(qcTextarea.scrollHeight, 90) + 'px';
+    });
+
+    // ⌘+Enter / Ctrl+Enter to save
+    qcTextarea.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            quickCaptureSave();
+        }
+    });
+
+    qcSaveBtn.addEventListener('click', quickCaptureSave);
+
+    // Gear button → open inbox settings
+    document.getElementById('qcInboxName').addEventListener('click', openInboxSetupModal);
+
+    // Inbox setup modal
+    document.getElementById('closeInboxSetupModal').addEventListener('click', () => closeModal('inboxSetupModal'));
+    document.getElementById('cancelInboxSetup').addEventListener('click', () => closeModal('inboxSetupModal'));
+    document.getElementById('confirmInboxSetup').addEventListener('click', saveInboxSetup);
 
     // Popout button
     document.getElementById('popoutBtn').addEventListener('click', () => {
@@ -2838,6 +3284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             await loadGists();
             await loadProjects();
+            await initQuickCapture();
             showStatus('Logged in successfully!', 'success');
 
         } catch (error) {
@@ -3051,6 +3498,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('cancelConvertDraft').addEventListener('click', () => closeModal('convertDraftModal'));
     document.getElementById('confirmConvertDraft').addEventListener('click', convertDraftToIssue);
 
+    // Move to project modal
+    document.getElementById('closeMoveToProjectModal').addEventListener('click', () => closeModal('moveToProjectModal'));
+    document.getElementById('cancelMoveToProject').addEventListener('click', () => closeModal('moveToProjectModal'));
+    document.getElementById('confirmMoveToProject').addEventListener('click', moveToProject);
+
     // Close modals on overlay click
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
@@ -3078,6 +3530,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             await loadGists();
             await loadProjects();
+            await initQuickCapture();
 
         } catch (error) {
             console.error('Error loading user data:', error);
