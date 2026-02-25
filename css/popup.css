@@ -731,7 +731,6 @@ input:checked+.slider:before {
 	border-radius: 6px;
 	resize: vertical;
 	font-family: inherit;
-	min-height: 120px;
 }
 
 .textarea:focus {

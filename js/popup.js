@@ -2449,11 +2449,35 @@ async function renameProject() {
     }
 }
 
-function openCreateProjectModal() {
+async function openCreateProjectModal() {
     // Clear form fields
     document.getElementById('newProjectTitleInput').value = '';
     document.getElementById('newProjectDescription').value = '';
     document.getElementById('projectPublic').checked = false;
+
+    // Populate repo dropdown
+    const repoSelect = document.getElementById('newProjectRepository');
+    repoSelect.innerHTML = '<option value="">No repository</option>';
+
+    try {
+        const tokenData = await getStoredToken();
+        if (tokenData && tokenData.access_token) {
+            if (userRepositories.length === 0) {
+                userRepositories = await fetchUserRepositories(tokenData.access_token);
+            }
+            userRepositories.forEach(repo => {
+                const option = document.createElement('option');
+                option.value = repo.node_id;
+                option.textContent = repo.full_name;
+                option.dataset.owner = repo.owner.login;
+                option.dataset.name = repo.name;
+                repoSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading repositories for project modal:', error);
+    }
+
     openModal('createProjectModal');
 }
 
@@ -2461,6 +2485,8 @@ async function createNewProject() {
     const title = document.getElementById('newProjectTitleInput').value.trim();
     const description = document.getElementById('newProjectDescription').value.trim();
     const isPublic = document.getElementById('projectPublic').checked;
+    const repoSelect = document.getElementById('newProjectRepository');
+    const selectedRepoNodeId = repoSelect.value || null;
 
     if (!title) {
         showStatus('Please enter a project title', 'error');
@@ -2587,12 +2613,51 @@ async function createNewProject() {
             }
         }
 
+        // Link repository to project if one was selected
+        if (selectedRepoNodeId) {
+            const linkQuery = `
+                mutation LinkProjectToRepo($projectId: ID!, $repositoryId: ID!) {
+                    linkProjectV2ToRepository(input: {
+                        projectId: $projectId
+                        repositoryId: $repositoryId
+                    }) {
+                        repository {
+                            name
+                        }
+                    }
+                }
+            `;
+
+            const linkResponse = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${tokenData.access_token}`,
+                },
+                body: JSON.stringify({
+                    query: linkQuery,
+                    variables: {
+                        projectId: newProjectId,
+                        repositoryId: selectedRepoNodeId
+                    }
+                })
+            });
+
+            const linkResult = await linkResponse.json();
+
+            if (linkResult.errors) {
+                console.error('Error linking repository to project:', linkResult.errors);
+                // Don't throw — project was still created successfully
+            }
+        }
+
         showStatus('Project created successfully!', 'success');
 
         // Clear form fields
         document.getElementById('newProjectTitleInput').value = '';
         document.getElementById('newProjectDescription').value = '';
         document.getElementById('projectPublic').checked = false;
+        document.getElementById('newProjectRepository').value = '';
 
         closeModal('createProjectModal');
 
@@ -2944,8 +3009,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Create new project button
-    document.getElementById('createNewProjectBtn').addEventListener('click', () => {
-        openCreateProjectModal();
+    document.getElementById('createNewProjectBtn').addEventListener('click', async () => {
+        await openCreateProjectModal();
     });
 
     // Edit gist button
