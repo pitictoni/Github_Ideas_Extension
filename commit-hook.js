@@ -1,5 +1,4 @@
 const fs = require("fs");
-const { execSync } = require("child_process");
 const bump = require("./bump_version.js");
 
 const messageFile = process.argv[2];
@@ -17,6 +16,6 @@ if (message.includes("BREAKING")) {
 
 if (type) {
   const newVersion = bump(type);
-  execSync("git add manifest.json");
+  fs.writeFileSync(".git/version-bumped", newVersion);
   console.log("Version bumped to " + newVersion);
 }
