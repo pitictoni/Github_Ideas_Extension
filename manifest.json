@@ -1,34 +1,34 @@
 {
-    "name": "GitHub Ideas Extension",
-    "version": "0.2.0",
-    "manifest_version": 3,
-    "description": "Manage your GitHub Projects and Gists",
-    "icons": {
-        "16": "./icons/extension_icon16.png",
-        "48": "./icons/extension_icon48.png",
-        "128": "./icons/extension_icon128.png",
-        "512": "./icons/extension_icon512.png"
-    },
-    "permissions": [
-        "identity",
-        "storage"
-    ],
-    "action": {
-        "default_popup": "popup.html",
-        "default_icon": {
-            "16": "./icons/extension_icon16.png",
-            "48": "./icons/extension_icon48.png",
-            "128": "./icons/extension_icon128.png",
-            "512": "./icons/extension_icon512.png"
-        }
-    },
-    "host_permissions": [
-        "https://github.com/*",
-        "https://api.github.com/*",
-        "http://localhost:5000/*",
-        "https://github-oauth-worker.iopy.workers.dev/*"
-    ],
-    "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'"
+  "name": "GitHub Ideas Extension",
+  "version": "0.2.1",
+  "manifest_version": 3,
+  "description": "Manage your GitHub Projects and Gists",
+  "icons": {
+    "16": "./icons/extension_icon16.png",
+    "48": "./icons/extension_icon48.png",
+    "128": "./icons/extension_icon128.png",
+    "512": "./icons/extension_icon512.png"
+  },
+  "permissions": [
+    "identity",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "./icons/extension_icon16.png",
+      "48": "./icons/extension_icon48.png",
+      "128": "./icons/extension_icon128.png",
+      "512": "./icons/extension_icon512.png"
     }
+  },
+  "host_permissions": [
+    "https://github.com/*",
+    "https://api.github.com/*",
+    "http://localhost:5000/*",
+    "https://github-oauth-worker.iopy.workers.dev/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }
