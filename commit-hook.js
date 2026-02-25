@@ -1,6 +1,6 @@
 const fs = require("fs");
 const { execSync } = require("child_process");
-const bump = require("D:\\Projects\\Github_Ideas_Extension\\bump_version.js");
+const bump = require("./bump_version.js");
 
 const messageFile = process.argv[2];
 const message = fs.readFileSync(messageFile, "utf8");
