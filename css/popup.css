@@ -1449,3 +1449,166 @@ input:checked+.slider:before {
 	opacity: 1;
 	transform: translateX(-50%) translateY(-4px);
 }
+/* ============================================================================
+   Quick Capture Bar
+   ============================================================================ */
+
+.quick-capture-bar {
+    padding: 10px 0 12px 0;
+}
+
+.qc-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--accent-color);
+    margin-bottom: 7px;
+}
+
+.qc-inbox-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: inherit;
+    letter-spacing: 0.04em;
+    transition: background 0.15s, color 0.15s;
+    margin-left: 2px;
+}
+
+.qc-inbox-name:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.qc-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.qc-textarea {
+    flex: 1;
+    resize: none;
+    border: 1.5px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 11px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 36px;
+    max-height: 90px;
+    overflow-y: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.qc-textarea::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.75;
+}
+
+.qc-textarea:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    min-height: 62px;
+}
+
+.qc-save-btn {
+    background: var(--accent-color);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 8px 13px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.qc-save-btn:hover { background: var(--accent-hover); }
+.qc-save-btn:active { transform: scale(0.96); }
+.qc-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Quick capture toggle switch ── */
+
+.qc-label {
+    justify-content: flex-start; /* keep existing items left */
+}
+
+.qc-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.qc-toggle input {
+    display: none;
+}
+
+.qc-toggle-track {
+    display: inline-block;
+    width: 28px;
+    height: 15px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    position: relative;
+    transition: background 0.2s;
+    border: 1px solid var(--border-color);
+}
+
+.qc-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    transition: transform 0.2s, background 0.2s;
+}
+
+.qc-toggle input:checked + .qc-toggle-track {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.qc-toggle input:checked + .qc-toggle-track::after {
+    transform: translateX(13px);
+    background: #fff;
+}
+
+/* Collapsed state when toggle is off */
+.quick-capture-bar.qc-collapsed .qc-input-row {
+    display: none;
+}
+
+.quick-capture-bar.qc-collapsed .qc-inbox-name {
+    display: none;
+}
+
+.quick-capture-bar.qc-collapsed {
+    padding-bottom: 8px;
+}
