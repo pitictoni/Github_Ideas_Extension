@@ -15,8 +15,13 @@ let deleteCallback = null;
 
 let allProjects = [];
 let currentProject = null;
+let currentMode = 'project';
 let projectFieldDefinitions = {};
 let userRepositories = [];
+
+// Source mode
+let currentRepoFullName = null;
+let currentRepoIssueState = 'open';
 
 // ============================================================================
 // Utility Functions
@@ -437,6 +442,13 @@ async function fetchProjects(token) {
                         owner {
                             ... on User { login name }
                             ... on Organization { login name }
+                        }
+                        repositories(first: 5) {
+                            nodes {
+                                name
+                                nameWithOwner
+                                owner { login }
+                            }
                         }
                         fields(first: 20) {
                             nodes {
@@ -1177,25 +1189,33 @@ async function loadProjects() {
     try {
         allProjects = await fetchProjects(tokenData.access_token);
 
-        const projectSelect = document.getElementById('projectSelect');
-        projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
-
         if (allProjects.length === 0) {
             showStatus('No projects found', 'info');
             return;
         }
 
-        allProjects.data.viewer.projectsV2.nodes.forEach(project => {
-            // Extract and store field definitions for each project
-            projectFieldDefinitions[project.id] = extractFieldDefinitions(project);
+        // Rebuild unified grouped select
+        const unifiedSelect = document.getElementById('unifiedSelect');
+        const existingRepoGroup = unifiedSelect.querySelector('optgroup[data-type="repo"]');
+        unifiedSelect.innerHTML = '<option value="" disabled selected>Select a project or repository...</option>';
 
+        const projectGroup = document.createElement('optgroup');
+        projectGroup.label = 'Projects';
+        projectGroup.dataset.type = 'project';
+
+        allProjects.data.viewer.projectsV2.nodes.forEach(project => {
+            projectFieldDefinitions[project.id] = extractFieldDefinitions(project);
             const option = document.createElement('option');
-            option.value = project.id;
-            const visibilityLabel = project.public ? '[Public]' : '[Private]';
-            option.textContent = `${visibilityLabel} ${project.title}`;
+            option.value = 'project:' + project.id;
+            option.textContent = project.title;
             option.dataset.url = project.url;
-            projectSelect.appendChild(option);
+            projectGroup.appendChild(option);
         });
+        unifiedSelect.appendChild(projectGroup);
+
+        // Re-append repo group if already loaded, else populate now
+        if (existingRepoGroup) unifiedSelect.appendChild(existingRepoGroup);
+        else await populateRepoOptgroup(unifiedSelect);
 
     } catch (error) {
         console.error('Error loading projects:', error);
@@ -1215,6 +1235,19 @@ async function loadProjectIssues(projectId) {
 
         currentProject = project;
         document.getElementById('projectTitle').textContent = project.title;
+        document.querySelector('.project-preview-actions').style.display = 'block';
+        document.getElementById('issuesStatusColHead').textContent = 'Status';
+
+        // Show linked repo badge if available
+        const repoSubtitle = document.getElementById('projectRepoSubtitle');
+        const linkedRepos = project.repositories?.nodes?.filter(r => r.nameWithOwner) || [];
+        if (linkedRepos.length > 0) {
+            repoSubtitle.textContent = linkedRepos.map(r => r.nameWithOwner).join(', ');
+            repoSubtitle.style.display = 'inline-flex';
+        } else {
+            repoSubtitle.textContent = '';
+            repoSubtitle.style.display = 'none';
+        }
 
         const viewBtn = document.getElementById('viewProjectBtn');
         viewBtn.onclick = () => window.open(project.url, '_blank');
@@ -1387,6 +1420,151 @@ function hideProjectIssues() {
     currentProject = null;
 }
 
+async function loadRepoIssues(repoFullName, state) {
+    if (!repoFullName) return;
+    currentRepoFullName = repoFullName;
+    if (state) currentRepoIssueState = state;
+
+    const tokenData = await getStoredToken();
+    if (!tokenData?.access_token) return;
+
+    const issuesSection = document.getElementById('projectIssuesSection');
+    const tableBody = document.getElementById('issuesTableBody');
+    const emptyState = document.getElementById('emptyIssuesState');
+
+    document.getElementById('projectTitle').textContent = repoFullName;
+    document.querySelector('.project-preview-actions').style.display = 'block';
+    document.getElementById('issuesStatusColHead').textContent = 'State';
+    document.getElementById('projectRepoSubtitle').style.display = 'none';
+
+    issuesSection.style.display = 'block';
+    tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:16px;color:var(--text-secondary);font-size:13px;">Loading…</td></tr>';
+    tableBody.parentElement.style.display = 'table';
+    emptyState.style.display = 'none';
+
+    try {
+        const [owner, repo] = repoFullName.split('/');
+        const response = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/issues?state=${currentRepoIssueState}&per_page=100&sort=updated`,
+            { headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Accept': 'application/vnd.github.v3+json' } }
+        );
+        if (!response.ok) throw new Error('Failed to fetch issues');
+
+        const issues = (await response.json()).filter(i => !i.pull_request);
+        tableBody.innerHTML = '';
+
+        if (issues.length === 0) {
+            tableBody.parentElement.style.display = 'none';
+            emptyState.style.display = 'block';
+            emptyState.querySelector('p').textContent = `No ${currentRepoIssueState === 'all' ? '' : currentRepoIssueState + ' '}issues in this repository`;
+            return;
+        }
+
+        issues.forEach(issue => {
+            const labels = (issue.labels || []).map(l =>
+                `<span style="background:#${l.color}22;color:#${l.color};border:1px solid #${l.color}55;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:500;">${l.name}</span>`
+            ).join(' ');
+
+            const isOpen = issue.state === 'open';
+            const dotColor = isOpen ? '#22c55e' : '#a855f7';
+            const stateBadge = `<span style="display:inline-flex;align-items:center;gap:5px;background:${dotColor}15;color:${dotColor};border:1px solid ${dotColor}30;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:500;"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};display:inline-block;flex-shrink:0;"></span>${issue.state}</span>`;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>
+                    <a href="${issue.html_url}" target="_blank" class="issue-title" style="text-decoration:none;color:var(--text-primary);">
+                        #${issue.number} ${issue.title}
+                    </a>
+                    ${labels ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${labels}</div>` : ''}
+                </td>
+                <td>${stateBadge}</td>
+                <td class="issue-actions-cell">
+                    <button class="issue-actions-btn repo-issue-actions-btn"
+                        data-issue-url="${issue.html_url}"
+                        data-issue-title="${issue.title.replace(/"/g, '&quot;')}"
+                        data-issue-number="${issue.number}"
+                        data-issue-state="${issue.state}"
+                        data-issue-owner="${owner}"
+                        data-issue-repo="${repo}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+                        </svg>
+                    </button>
+                </td>`;
+            tableBody.appendChild(row);
+        });
+
+        tableBody.querySelectorAll('.repo-issue-actions-btn').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); showRepoIssueActionsMenu(e.currentTarget); });
+        });
+
+    } catch (err) {
+        console.error('Error loading repo issues:', err);
+        showStatus('Failed to load issues: ' + err.message, 'error');
+        tableBody.innerHTML = '';
+        tableBody.parentElement.style.display = 'none';
+        emptyState.style.display = 'block';
+    }
+}
+
+function showRepoIssueActionsMenu(button) {
+    document.querySelectorAll('.issue-actions-menu').forEach(m => m.remove());
+
+    const url    = button.getAttribute('data-issue-url');
+    const number = button.getAttribute('data-issue-number');
+    const state  = button.getAttribute('data-issue-state');
+    const owner  = button.getAttribute('data-issue-owner');
+    const repo   = button.getAttribute('data-issue-repo');
+    const newState = state === 'open' ? 'closed' : 'open';
+
+    const menu = document.createElement('div');
+    menu.className = 'issue-actions-menu show';
+
+    const openItem = document.createElement('a');
+    openItem.href = url;
+    openItem.target = '_blank';
+    openItem.className = 'issue-actions-menu-item';
+    openItem.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.11.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.19 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> Open on GitHub`;
+    menu.appendChild(openItem);
+
+    const toggleItem = document.createElement('div');
+    toggleItem.className = 'issue-actions-menu-item' + (state === 'open' ? ' danger' : '');
+    toggleItem.innerHTML = state === 'open'
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z"/></svg> Close issue`
+        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z"/></svg> Reopen issue`;
+    toggleItem.addEventListener('click', async () => {
+        closeIssueActionsMenu();
+        try {
+            const tokenData = await getStoredToken();
+            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: newState })
+            });
+            if (!res.ok) throw new Error('Failed');
+            showStatus(`Issue #${number} ${newState === 'closed' ? 'closed' : 'reopened'}`, 'success');
+            await loadRepoIssues(currentRepoFullName);
+        } catch (err) { showStatus('Failed: ' + err.message, 'error'); }
+    });
+    menu.appendChild(toggleItem);
+
+    document.body.appendChild(menu);
+    const btnRect = button.getBoundingClientRect();
+    const cRect = document.querySelector('.container').getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '10000';
+    setTimeout(() => {
+        const mRect = menu.getBoundingClientRect();
+        let top = btnRect.bottom + 4;
+        let left = btnRect.right - mRect.width;
+        if (left < cRect.left) left = cRect.left + 8;
+        if (top + mRect.height > cRect.bottom) top = btnRect.top - mRect.height - 4;
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+    }, 0);
+    setTimeout(() => document.addEventListener('click', closeIssueActionsMenu), 0);
+}
+
 // ============================================================================
 // Convert Draft to Issue
 // ============================================================================
@@ -1421,6 +1599,16 @@ async function openConvertDraftModal(itemId, title, body) {
             option.dataset.name = repo.name;
             repoSelect.appendChild(option);
         });
+
+        // Auto-select the linked repo if the project has one
+        const convertLinkedRepos = currentProject.repositories?.nodes?.filter(r => r.nameWithOwner) || [];
+        const convertRepoRow = document.getElementById('convertDraftRepositoryRow');
+        if (convertLinkedRepos.length === 1) {
+            repoSelect.value = convertLinkedRepos[0].nameWithOwner;
+            if (convertRepoRow) convertRepoRow.style.display = 'none';
+        } else {
+            if (convertRepoRow) convertRepoRow.style.display = '';
+        }
 
         // Populate target project dropdown — all projects including current
         const targetSel = document.getElementById('convertDraftTargetProject');
@@ -2313,6 +2501,16 @@ async function openAddIssueModal() {
             repoSelect.appendChild(option);
         });
 
+        // Auto-select the linked repo if the project has one
+        const projectLinkedRepos = currentProject.repositories?.nodes?.filter(r => r.nameWithOwner) || [];
+        const repoRow = document.getElementById('issueRepositoryRow');
+        if (projectLinkedRepos.length === 1) {
+            repoSelect.value = projectLinkedRepos[0].nameWithOwner;
+            if (repoRow) repoRow.style.display = 'none';
+        } else {
+            if (repoRow) repoRow.style.display = '';
+        }
+
         document.getElementById('issueTitle').value = '';
         document.getElementById('issueBody').value = '';
 
@@ -2605,8 +2803,8 @@ async function renameProject() {
         currentProject.title = newTitle;
         document.getElementById('projectTitle').textContent = newTitle;
 
-        const projectSelect = document.getElementById('projectSelect');
-        const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
+        const projectSelect = document.getElementById('unifiedSelect');
+        const selectedOption = projectSelect.querySelector(`option[value="project:${currentProject.id}"]`);
         if (selectedOption) {
             selectedOption.textContent = newTitle;
         }
@@ -2842,8 +3040,8 @@ async function createNewProject() {
         await loadProjects();
 
         // Select the newly created project
-        const projectSelect = document.getElementById('projectSelect');
-        projectSelect.value = newProjectId;
+        const projectSelect = document.getElementById('unifiedSelect');
+        projectSelect.value = 'project:' + newProjectId;
 
         // Trigger change event to load the project
         await loadProjectIssues(newProjectId);
@@ -3007,8 +3205,8 @@ async function deleteCurrentProject() {
                 allProjects.data.viewer.projectsV2.nodes.splice(projectIndex, 1);
             }
 
-            const projectSelect = document.getElementById('projectSelect');
-            const selectedOption = projectSelect.querySelector(`option[value="${currentProject.id}"]`);
+            const projectSelect = document.getElementById('unifiedSelect');
+            const selectedOption = projectSelect.querySelector(`option[value="project:${currentProject.id}"]`);
             if (selectedOption) {
                 selectedOption.remove();
             }
@@ -3272,6 +3470,28 @@ async function quickCaptureSave() {
     }
 }
 
+// ============================================================================
+// Populate repo optgroup in the unified select
+// ============================================================================
+
+async function populateRepoOptgroup(select) {
+    try {
+        const tokenData = await getStoredToken();
+        if (!tokenData?.access_token) return;
+        if (userRepositories.length === 0) userRepositories = await fetchUserRepositories(tokenData.access_token);
+        const repoGroup = document.createElement('optgroup');
+        repoGroup.label = 'Repositories';
+        repoGroup.dataset.type = 'repo';
+        userRepositories.forEach(repo => {
+            const opt = document.createElement('option');
+            opt.value = 'repo:' + repo.full_name;
+            opt.textContent = repo.full_name;
+            repoGroup.appendChild(opt);
+        });
+        select.appendChild(repoGroup);
+    } catch(e) { console.error('Failed to load repos for unified select', e); }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Check if we're in a popout window
     const urlParams = new URLSearchParams(window.location.search);
@@ -3421,29 +3641,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Projects tab - Project select
-    document.getElementById('projectSelect').addEventListener('change', async (e) => {
-        const projectId = e.target.value;
-        if (!projectId) {
-            hideProjectIssues();
-            return;
+    // Issues tab — mode toggle
+    // Unified project/repo select
+    document.getElementById('unifiedSelect').addEventListener('change', async (e) => {
+        const val = e.target.value;
+        if (!val) { hideProjectIssues(); return; }
+        if (val.startsWith('project:')) {
+            currentMode = 'project';
+            document.getElementById('stateFilterRow').style.display = 'none';
+            await loadProjectIssues(val.slice('project:'.length));
+        } else if (val.startsWith('repo:')) {
+            currentMode = 'repo';
+            document.getElementById('stateFilterRow').style.display = 'flex';
+            await loadRepoIssues(val.slice('repo:'.length));
         }
-
-        await loadProjectIssues(projectId);
     });
 
-    // Projects tab - Refresh projects
+    // State filter pills
+    document.querySelectorAll('.state-pill').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            document.querySelectorAll('.state-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentRepoIssueState = btn.getAttribute('data-state');
+            if (currentRepoFullName) await loadRepoIssues(currentRepoFullName);
+        });
+    });
+
+    // Refresh
     document.getElementById('refreshProjectsBtn').addEventListener('click', async () => {
         const btn = document.getElementById('refreshProjectsBtn');
         btn.disabled = true;
-
         try {
-            await loadProjects();
-            showStatus('Projects refreshed successfully', 'success');
-
+            if (currentMode === 'repo' && currentRepoFullName) {
+                await loadRepoIssues(currentRepoFullName);
+                showStatus('Issues refreshed', 'success');
+            } else {
+                await loadProjects();
+                showStatus('Projects refreshed successfully', 'success');
+            }
         } catch (error) {
-            console.error('Error refreshing projects:', error);
-            showStatus('Failed to refresh projects', 'error');
+            showStatus('Failed to refresh', 'error');
         } finally {
             btn.disabled = false;
         }

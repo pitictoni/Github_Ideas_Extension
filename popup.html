@@ -116,48 +116,50 @@
 
             <!-- Tabs -->
             <div class="tabs">
-                <button class="tab-btn active" data-tab="projects">Projects</button>
+                <button class="tab-btn active" data-tab="projects">Issues</button>
                 <button class="tab-btn" data-tab="gists">Gists</button>
             </div>
 
-            <!-- Projects Tab -->
+            <!-- Issues Tab -->
             <div id="projectsTab" class="tab-content active">
                 <div class="projects-container">
-                    <!-- Project Selection -->
+                    <!-- Source Picker: Project or Repository -->
                     <div id="projectSelectSection" class="project-header-section">
                         <div class="project-select-actions">
-                            <label for="projectSelect" class="section-label">MY PROJECTS</label>
+                            <label for="unifiedSelect" class="section-label">PROJECT / REPOSITORY</label>
                             <div class="project-quick-actions">
-                                <button class="btn btn-primary btn-sm btn-with-tooltip" id="createNewProjectBtn"
-                                    data-tooltip="Add Project">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16"
-                                        fill="currentColor">
-                                        <path
-                                            d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z" />
+                                <button class="btn btn-primary btn-sm btn-with-tooltip" id="createNewProjectBtn" data-tooltip="New Project">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z" />
                                     </svg>
                                 </button>
                             </div>
                         </div>
                         <div class="select-row">
-                            <select id="projectSelect" class="select">
-                                <option value="" disabled selected>Select a project</option>
+                            <select id="unifiedSelect" class="select">
+                                <option value="" disabled selected>Select a project or repository…</option>
                             </select>
-                            <button class="btn-icon-refresh" id="refreshProjectsBtn" title="Refresh projects">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"
-                                    fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                        d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
-                                    <path
-                                        d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+                            <button class="btn-icon-refresh" id="refreshProjectsBtn" title="Refresh">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+                                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
                                 </svg>
                             </button>
+                        </div>
+                        <!-- State filter pills — repo mode only -->
+                        <div class="state-filter-row" id="stateFilterRow" style="display:none;">
+                            <button class="state-pill active" data-state="open">Open</button>
+                            <button class="state-pill" data-state="closed">Closed</button>
+                            <button class="state-pill" data-state="all">All</button>
                         </div>
                     </div>
 
                     <!-- Project Issues Table -->
                     <div id="projectIssuesSection" class="project-issues-section" style="display: none;">
                         <div class="project-issues-header">
-                            <h3 id="projectTitle">Project Issues</h3>
+                            <div class="project-title-block">
+                                <h3 id="projectTitle">Project Issues</h3>
+                            </div>
                             <div class="project-preview-actions">
                                 <button class="btn btn-primary btn-sm btn-with-tooltip" id="addIssueBtn"
                                     data-tooltip="Add to Project">
@@ -212,13 +214,14 @@
                                     </svg>
                                 </button>
                             </div>
+                            <span id="projectRepoSubtitle" class="project-repo-badge" style="display:none;"></span>
                         </div>
                         <div class="issues-table-container">
                             <table class="issues-table">
                                 <thead>
                                     <tr>
                                         <th>Title</th>
-                                        <th>Status</th>
+                                        <th id="issuesStatusColHead">Status</th>
                                         <th style="width: 60px; text-align: center;">Actions</th>
                                     </tr>
                                 </thead>
@@ -633,7 +636,7 @@
                 <button class="modal-close" id="closeAddIssueModal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="editor-section">
+                <div class="editor-section" id="issueRepositoryRow">
                     <label for="issueRepository" class="section-label">REPOSITORY</label>
                     <select id="issueRepository" class="select">
                         <option value="" disabled selected>Select a repository</option>
@@ -708,7 +711,7 @@
                 <button class="modal-close" id="closeConvertDraftModal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="editor-section">
+                <div class="editor-section" id="convertDraftRepositoryRow">
                     <label for="convertDraftRepository" class="section-label">REPOSITORY</label>
                     <select id="convertDraftRepository" class="select">
                         <option value="" disabled selected>Select a repository</option>
