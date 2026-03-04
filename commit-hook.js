@@ -8,9 +8,9 @@ let type = null;
 
 if (message.includes("BREAKING")) {
   type = "major";
-} else if (message.startsWith("feat:")) {
+} else if (message.startsWith("feat:") || message.startsWith("feat(")) {
   type = "minor";
-} else if (message.startsWith("fix:")) {
+} else if (message.startsWith("fix:") || message.startsWith("fix(")) {
   type = "patch";
 }
 

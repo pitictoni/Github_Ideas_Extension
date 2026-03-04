@@ -1,6 +1,6 @@
 {
   "name": "GitHub Ideas Extension",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "manifest_version": 3,
   "description": "Manage your GitHub Projects and Gists",
   "icons": {

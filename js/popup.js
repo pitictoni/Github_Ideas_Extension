@@ -15,7 +15,6 @@ let deleteCallback = null;
 
 let allProjects = [];
 let currentProject = null;
-let currentMode = 'project';
 let projectFieldDefinitions = {};
 let userRepositories = [];
 
@@ -1194,7 +1193,6 @@ async function loadProjects() {
             return;
         }
 
-        // Rebuild unified grouped select
         const unifiedSelect = document.getElementById('unifiedSelect');
         const existingRepoGroup = unifiedSelect.querySelector('optgroup[data-type="repo"]');
         unifiedSelect.innerHTML = '<option value="" disabled selected>Select a project or repository...</option>';
@@ -1213,7 +1211,6 @@ async function loadProjects() {
         });
         unifiedSelect.appendChild(projectGroup);
 
-        // Re-append repo group if already loaded, else populate now
         if (existingRepoGroup) unifiedSelect.appendChild(existingRepoGroup);
         else await populateRepoOptgroup(unifiedSelect);
 
@@ -1234,9 +1231,8 @@ async function loadProjectIssues(projectId) {
         if (!project) return;
 
         currentProject = project;
+        document.getElementById('repoIssuesSection').style.display = 'none';
         document.getElementById('projectTitle').textContent = project.title;
-        document.querySelector('.project-preview-actions').style.display = 'block';
-        document.getElementById('issuesStatusColHead').textContent = 'Status';
 
         // Show linked repo badge if available
         const repoSubtitle = document.getElementById('projectRepoSubtitle');
@@ -1294,8 +1290,8 @@ async function loadProjectIssues(projectId) {
 }
 
 function displayProjectIssues(issues) {
-    const tableBody = document.getElementById('issuesTableBody');
-    const emptyState = document.getElementById('emptyIssuesState');
+    const tableBody = document.getElementById('projectIssuesTableBody');
+    const emptyState = document.getElementById('emptyProjectIssuesState');
     const issuesSection = document.getElementById('projectIssuesSection');
 
     tableBody.innerHTML = '';
@@ -1403,8 +1399,7 @@ function displayProjectIssues(issues) {
             });
         });
 
-        // Add event listeners for issue action buttons
-        document.querySelectorAll('.issue-actions-btn').forEach(btn => {
+        tableBody.querySelectorAll('.issue-actions-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 showIssueActionsMenu(e.currentTarget);
@@ -1417,6 +1412,7 @@ function displayProjectIssues(issues) {
 
 function hideProjectIssues() {
     document.getElementById('projectIssuesSection').style.display = 'none';
+    document.getElementById('repoIssuesSection').style.display = 'none';
     currentProject = null;
 }
 
@@ -1428,17 +1424,22 @@ async function loadRepoIssues(repoFullName, state) {
     const tokenData = await getStoredToken();
     if (!tokenData?.access_token) return;
 
-    const issuesSection = document.getElementById('projectIssuesSection');
-    const tableBody = document.getElementById('issuesTableBody');
-    const emptyState = document.getElementById('emptyIssuesState');
-
-    document.getElementById('projectTitle').textContent = repoFullName;
-    document.querySelector('.project-preview-actions').style.display = 'block';
-    document.getElementById('issuesStatusColHead').textContent = 'State';
+    document.getElementById('projectIssuesSection').style.display = 'none';
     document.getElementById('projectRepoSubtitle').style.display = 'none';
+    const issuesSection = document.getElementById('repoIssuesSection');
+    const tableBody = document.getElementById('repoIssuesTableBody');
+    const emptyState = document.getElementById('emptyRepoIssuesState');
+
+    document.getElementById('repoTitle').textContent = repoFullName;
+    document.getElementById('viewRepoBtn').onclick = () => window.open(`https://github.com/${repoFullName}`, '_blank');
+
+    // Sync active tab
+    document.querySelectorAll('.repo-state-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.state === currentRepoIssueState);
+    });
 
     issuesSection.style.display = 'block';
-    tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:16px;color:var(--text-secondary);font-size:13px;">Loading…</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:16px;color:var(--text-secondary);font-size:13px;">Loading...</td></tr>';
     tableBody.parentElement.style.display = 'table';
     emptyState.style.display = 'none';
 
@@ -1449,25 +1450,21 @@ async function loadRepoIssues(repoFullName, state) {
             { headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Accept': 'application/vnd.github.v3+json' } }
         );
         if (!response.ok) throw new Error('Failed to fetch issues');
+        const allIssues = (await response.json()).filter(i => !i.pull_request);
 
-        const issues = (await response.json()).filter(i => !i.pull_request);
         tableBody.innerHTML = '';
 
-        if (issues.length === 0) {
+        if (allIssues.length === 0) {
             tableBody.parentElement.style.display = 'none';
             emptyState.style.display = 'block';
             emptyState.querySelector('p').textContent = `No ${currentRepoIssueState === 'all' ? '' : currentRepoIssueState + ' '}issues in this repository`;
             return;
         }
 
-        issues.forEach(issue => {
-            const labels = (issue.labels || []).map(l =>
-                `<span style="background:#${l.color}22;color:#${l.color};border:1px solid #${l.color}55;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:500;">${l.name}</span>`
-            ).join(' ');
-
+        allIssues.forEach(issue => {
             const isOpen = issue.state === 'open';
             const dotColor = isOpen ? '#22c55e' : '#a855f7';
-            const stateBadge = `<span style="display:inline-flex;align-items:center;gap:5px;background:${dotColor}15;color:${dotColor};border:1px solid ${dotColor}30;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:500;"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};display:inline-block;flex-shrink:0;"></span>${issue.state}</span>`;
+            const stateBadge = `<span class="repo-state-badge" style="background:${dotColor}15;color:${dotColor};border:1px solid ${dotColor}30;"><span class="state-dot" style="background:${dotColor};"></span>${issue.state}</span>`;
 
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -1475,7 +1472,7 @@ async function loadRepoIssues(repoFullName, state) {
                     <a href="${issue.html_url}" target="_blank" class="issue-title" style="text-decoration:none;color:var(--text-primary);">
                         #${issue.number} ${issue.title}
                     </a>
-                    ${labels ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${labels}</div>` : ''}
+                    ${issue.assignees?.length ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${issue.assignees.map(a => '@' + a.login).join(', ')}</div>` : ''}
                 </td>
                 <td>${stateBadge}</td>
                 <td class="issue-actions-cell">
@@ -1510,11 +1507,11 @@ async function loadRepoIssues(repoFullName, state) {
 function showRepoIssueActionsMenu(button) {
     document.querySelectorAll('.issue-actions-menu').forEach(m => m.remove());
 
-    const url    = button.getAttribute('data-issue-url');
+    const url = button.getAttribute('data-issue-url');
     const number = button.getAttribute('data-issue-number');
-    const state  = button.getAttribute('data-issue-state');
-    const owner  = button.getAttribute('data-issue-owner');
-    const repo   = button.getAttribute('data-issue-repo');
+    const state = button.getAttribute('data-issue-state');
+    const owner = button.getAttribute('data-issue-owner');
+    const repo = button.getAttribute('data-issue-repo');
     const newState = state === 'open' ? 'closed' : 'open';
 
     const menu = document.createElement('div');
@@ -3471,8 +3468,10 @@ async function quickCaptureSave() {
 }
 
 // ============================================================================
-// Populate repo optgroup in the unified select
+// Unified select helpers
 // ============================================================================
+
+let currentMode = 'project';
 
 async function populateRepoOptgroup(select) {
     try {
@@ -3489,7 +3488,7 @@ async function populateRepoOptgroup(select) {
             repoGroup.appendChild(opt);
         });
         select.appendChild(repoGroup);
-    } catch(e) { console.error('Failed to load repos for unified select', e); }
+    } catch (e) { console.error('Failed to load repos for unified select', e); }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -3648,23 +3647,67 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!val) { hideProjectIssues(); return; }
         if (val.startsWith('project:')) {
             currentMode = 'project';
-            document.getElementById('stateFilterRow').style.display = 'none';
             await loadProjectIssues(val.slice('project:'.length));
         } else if (val.startsWith('repo:')) {
             currentMode = 'repo';
-            document.getElementById('stateFilterRow').style.display = 'flex';
             await loadRepoIssues(val.slice('repo:'.length));
         }
     });
 
-    // State filter pills
-    document.querySelectorAll('.state-pill').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            document.querySelectorAll('.state-pill').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentRepoIssueState = btn.getAttribute('data-state');
+    // Repo state tabs
+    document.querySelectorAll('.repo-state-tab').forEach(tab => {
+        tab.addEventListener('click', async () => {
+            document.querySelectorAll('.repo-state-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentRepoIssueState = tab.dataset.state;
             if (currentRepoFullName) await loadRepoIssues(currentRepoFullName);
         });
+    });
+
+    // New repo issue modal
+    document.getElementById('newRepoIssueBtn').addEventListener('click', () => {
+        if (!currentRepoFullName) return;
+        document.getElementById('newIssueRepoName').textContent = currentRepoFullName;
+        document.getElementById('newIssueTitle').value = '';
+        document.getElementById('newIssueBody').value = '';
+        document.getElementById('newRepoIssueModal').style.display = 'flex';
+        setTimeout(() => document.getElementById('newIssueTitle').focus(), 50);
+    });
+    document.getElementById('closeNewRepoIssueModal').addEventListener('click', () => {
+        document.getElementById('newRepoIssueModal').style.display = 'none';
+    });
+    document.getElementById('cancelNewRepoIssue').addEventListener('click', () => {
+        document.getElementById('newRepoIssueModal').style.display = 'none';
+    });
+    document.getElementById('newRepoIssueModal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+    });
+    document.getElementById('submitNewRepoIssue').addEventListener('click', async () => {
+        const title = document.getElementById('newIssueTitle').value.trim();
+        const body = document.getElementById('newIssueBody').value.trim();
+        if (!title) { showStatus('Title is required', 'error'); return; }
+        const btn = document.getElementById('submitNewRepoIssue');
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+        try {
+            const tokenData = await getStoredToken();
+            const [owner, repo] = currentRepoFullName.split('/');
+            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, body: body || undefined })
+            });
+            if (!res.ok) throw new Error((await res.json()).message || 'Failed');
+            const issue = await res.json();
+            document.getElementById('newRepoIssueModal').style.display = 'none';
+            showStatus(`Issue #${issue.number} created`, 'success');
+            await loadRepoIssues(currentRepoFullName);
+        } catch (err) {
+            showStatus('Failed to create issue: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z" /></svg> Create Issue';
+        }
     });
 
     // Refresh

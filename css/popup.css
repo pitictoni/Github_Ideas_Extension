@@ -951,12 +951,12 @@ input:checked+.slider:before {
 
 .gist-quick-actions .btn {
 	padding: 6px 12px;
-    font-size: 13px;
+	font-size: 13px;
 }
 
 .project-quick-actions .btn {
 	padding: 6px 12px;
-    font-size: 13px;
+	font-size: 13px;
 }
 
 /* Gist Preview */
@@ -1220,7 +1220,7 @@ input:checked+.slider:before {
 	border-color: var(--primary-color);
 }
 
-.add-type-option > svg:first-child {
+.add-type-option>svg:first-child {
 	width: 24px;
 	height: 24px;
 	color: var(--primary-color);
@@ -1449,257 +1449,367 @@ input:checked+.slider:before {
 	opacity: 1;
 	transform: translateX(-50%) translateY(-4px);
 }
+
 /* ============================================================================
    Quick Capture Bar
    ============================================================================ */
 
 .quick-capture-bar {
-    padding: 10px 0 12px 0;
+	padding: 10px 0 12px 0;
 }
 
 .qc-label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--accent-color);
-    margin-bottom: 7px;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--accent-color);
+	margin-bottom: 7px;
 }
 
 .qc-inbox-name {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    background: none;
-    border: none;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-family: inherit;
-    letter-spacing: 0.04em;
-    transition: background 0.15s, color 0.15s;
-    margin-left: 2px;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	background: none;
+	border: none;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--text-secondary);
+	cursor: pointer;
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-family: inherit;
+	letter-spacing: 0.04em;
+	transition: background 0.15s, color 0.15s;
+	margin-left: 2px;
 }
 
 .qc-inbox-name:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
+	background: var(--bg-tertiary);
+	color: var(--text-primary);
 }
 
 .qc-input-row {
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
+	display: flex;
+	gap: 8px;
+	align-items: flex-end;
 }
 
 .qc-textarea {
-    flex: 1;
-    resize: none;
-    border: 1.5px solid var(--border-color);
-    border-radius: 8px;
-    padding: 8px 11px;
-    font-size: 13px;
-    font-family: inherit;
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    line-height: 1.5;
-    min-height: 36px;
-    max-height: 90px;
-    overflow-y: hidden;
-    transition: border-color 0.15s, box-shadow 0.15s;
+	flex: 1;
+	resize: none;
+	border: 1.5px solid var(--border-color);
+	border-radius: 8px;
+	padding: 8px 11px;
+	font-size: 13px;
+	font-family: inherit;
+	background: var(--bg-secondary);
+	color: var(--text-primary);
+	line-height: 1.5;
+	min-height: 36px;
+	max-height: 90px;
+	overflow-y: hidden;
+	transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .qc-textarea::placeholder {
-    color: var(--text-secondary);
-    opacity: 0.75;
+	color: var(--text-secondary);
+	opacity: 0.75;
 }
 
 .qc-textarea:focus {
-    outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    min-height: 62px;
+	outline: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+	min-height: 62px;
 }
 
 .qc-save-btn {
-    background: var(--accent-color);
-    color: #fff;
-    border: none;
-    border-radius: 7px;
-    padding: 8px 13px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: background 0.15s, transform 0.1s;
+	background: var(--accent-color);
+	color: #fff;
+	border: none;
+	border-radius: 7px;
+	padding: 8px 13px;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+	flex-shrink: 0;
+	transition: background 0.15s, transform 0.1s;
 }
 
-.qc-save-btn:hover { background: var(--accent-hover); }
-.qc-save-btn:active { transform: scale(0.96); }
-.qc-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.qc-save-btn:hover {
+	background: var(--accent-hover);
+}
+
+.qc-save-btn:active {
+	transform: scale(0.96);
+}
+
+.qc-save-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
 
 /* ── Quick capture toggle switch ── */
 
 .qc-label {
-    justify-content: flex-start; /* keep existing items left */
+	justify-content: flex-start;
+	/* keep existing items left */
 }
 
 .qc-toggle {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    flex-shrink: 0;
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+	flex-shrink: 0;
 }
 
 .qc-toggle input {
-    display: none;
+	display: none;
 }
 
 .qc-toggle-track {
-    display: inline-block;
-    width: 28px;
-    height: 15px;
-    background: var(--bg-tertiary);
-    border-radius: 8px;
-    position: relative;
-    transition: background 0.2s;
-    border: 1px solid var(--border-color);
+	display: inline-block;
+	width: 28px;
+	height: 15px;
+	background: var(--bg-tertiary);
+	border-radius: 8px;
+	position: relative;
+	transition: background 0.2s;
+	border: 1px solid var(--border-color);
 }
 
 .qc-toggle-track::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--text-secondary);
-    transition: transform 0.2s, background 0.2s;
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--text-secondary);
+	transition: transform 0.2s, background 0.2s;
 }
 
-.qc-toggle input:checked + .qc-toggle-track {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
+.qc-toggle input:checked+.qc-toggle-track {
+	background: var(--accent-color);
+	border-color: var(--accent-color);
 }
 
-.qc-toggle input:checked + .qc-toggle-track::after {
-    transform: translateX(13px);
-    background: #fff;
+.qc-toggle input:checked+.qc-toggle-track::after {
+	transform: translateX(13px);
+	background: #fff;
 }
 
 /* Collapsed state when toggle is off */
 .quick-capture-bar.qc-collapsed .qc-input-row {
-    display: none;
+	display: none;
 }
 
 .quick-capture-bar.qc-collapsed .qc-inbox-name {
-    display: none;
+	display: none;
 }
 
 .quick-capture-bar.qc-collapsed {
-    padding-bottom: 8px;
+	padding-bottom: 8px;
 }
 
 /* Project repo badge */
 .project-title-block {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
 }
 
 .project-repo-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 2px 8px;
-    width: fit-content;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-secondary);
+	background: var(--bg-secondary);
+	border: 1px solid var(--border-color);
+	border-radius: 10px;
+	padding: 2px 8px;
+	width: fit-content;
 }
 
 .project-repo-badge::before {
-    content: '';
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236b7280'%3E%3Cpath d='M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8V1.5Z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-size: contain;
-    flex-shrink: 0;
+	content: '';
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236b7280'%3E%3Cpath d='M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8V1.5Z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-size: contain;
+	flex-shrink: 0;
 }
 
 /* ── Source toggle (Project / Repository) ── */
 .source-toggle {
-    display: flex;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0 3px;
+	display: flex;
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	padding: 0 3px;
 }
 
 .source-btn {
-    background: none;
-    border: none;
-    border-radius: 6px;
-    padding: 4px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
+	background: none;
+	border: none;
+	border-radius: 6px;
+	padding: 4px 12px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-secondary);
+	cursor: pointer;
+	transition: all 0.15s;
+	white-space: nowrap;
 }
 
 .source-btn.active {
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-sm);
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	box-shadow: var(--shadow-sm);
 }
 
-.source-btn:not(.active):hover { color: var(--text-primary); }
+.source-btn:not(.active):hover {
+	color: var(--text-primary);
+}
 
 /* ── State filter pills (repo mode) ── */
 .state-filter-row {
-    display: flex;
-    gap: 4px;
+	display: flex;
+	gap: 4px;
 }
 
 .state-pill {
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    padding: 3px 12px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
+	background: none;
+	border: 1px solid var(--border-color);
+	border-radius: 20px;
+	padding: 3px 12px;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-secondary);
+	cursor: pointer;
+	transition: all 0.15s;
 }
 
 .state-pill.active {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: #fff;
+	background: var(--accent-color);
+	border-color: var(--accent-color);
+	color: #fff;
 }
 
 .state-pill:not(.active):hover {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
+	border-color: var(--accent-color);
+	color: var(--accent-color);
+}
+
+/* ============================================================================
+   Two-Table Layout
+   ============================================================================ */
+
+.issues-section {
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	overflow: hidden;
+	margin-top: -12px;
+}
+
+#projectIssuesSection {
+	border-left: 3px solid var(--accent-color, #6366f1);
+}
+
+#repoIssuesSection {
+	border-left: 3px solid #22c55e;
+}
+
+.issues-section-header {
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--border-color);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+}
+
+.issues-section-header .project-title-block {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.issues-section-header h3 {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-primary);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ── Repo state tabs ── */
+.repo-state-tabs {
+	display: flex;
+	border-bottom: 1px solid var(--border-color);
+	background: var(--bg-secondary);
+	padding: 0 12px;
+	gap: 0;
+}
+
+.repo-state-tab {
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	color: var(--text-secondary);
+	font-size: 12px;
+	font-weight: 500;
+	padding: 8px 14px;
+	cursor: pointer;
+	transition: color 0.15s, border-color 0.15s;
+	margin-bottom: -1px;
+}
+
+.repo-state-tab:hover {
+	color: var(--text-primary);
+}
+
+.repo-state-tab.active {
+	color: var(--accent-color, #6366f1);
+	border-bottom-color: var(--accent-color, #6366f1);
+	font-weight: 600;
+}
+
+/* ── Repo state badge (inline in table rows) ── */
+.repo-state-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 3px 10px;
+	border-radius: 12px;
+	font-size: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.state-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	flex-shrink: 0;
 }
