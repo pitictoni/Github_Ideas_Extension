@@ -1,6 +1,6 @@
 {
   "name": "GitHub Ideas Extension",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "manifest_version": 3,
   "description": "Manage your GitHub Projects and Gists",
   "icons": {
@@ -26,7 +26,8 @@
     "https://github.com/*",
     "https://api.github.com/*",
     "http://localhost:5000/*",
-    "https://github-oauth-worker.iopy.workers.dev/*"
+    "https://github-oauth-worker.iopy.workers.dev/*",
+    "https://api.anthropic.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

@@ -632,6 +632,10 @@ async function loadGists() {
     const gistSelect = document.getElementById('gistSelect');
     gistSelect.innerHTML = '<option value="" disabled selected>Select a gist to view/edit</option>';
 
+    if (typeof AI_ASSIST !== 'undefined') {
+        AI_ASSIST.setGistContext(currentGist);
+    }
+
     allGists.forEach(gist => {
         const option = document.createElement('option');
         option.value = gist.id;
@@ -1214,6 +1218,10 @@ async function loadProjects() {
         if (existingRepoGroup) unifiedSelect.appendChild(existingRepoGroup);
         else await populateRepoOptgroup(unifiedSelect);
 
+        if (typeof AI_ASSIST !== 'undefined') {
+            AI_ASSIST.setProjectContext(currentProject);
+        }
+
     } catch (error) {
         console.error('Error loading projects:', error);
         showStatus('Failed to load projects', 'error');
@@ -1461,6 +1469,11 @@ async function loadRepoIssues(repoFullName, state) {
             return;
         }
 
+        // Add near where you display issue details / open edit modal
+        if (typeof AI_ASSIST !== 'undefined') {
+            AI_ASSIST.setIssueContext(issue);
+        }
+
         allIssues.forEach(issue => {
             const isOpen = issue.state === 'open';
             const dotColor = isOpen ? '#22c55e' : '#a855f7';
@@ -1470,7 +1483,7 @@ async function loadRepoIssues(repoFullName, state) {
             row.innerHTML = `
                 <td>
                     <a href="${issue.html_url}" target="_blank" class="issue-title" style="text-decoration:none;color:var(--text-primary);">
-                        #${issue.number} ${issue.title}
+                        ${issue.title} #${issue.number}
                     </a>
                     ${issue.assignees?.length ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${issue.assignees.map(a => '@' + a.login).join(', ')}</div>` : ''}
                 </td>
