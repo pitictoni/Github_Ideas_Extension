@@ -5,6 +5,126 @@ const CONFIG = {
 };
 
 // ============================================================================
+// showPopover — unified positioning engine for tooltips, menus & dropdowns
+// ============================================================================
+(function () {
+    const CONTAINER_SEL = '.container';
+    const GAP = 4;       // px between anchor and popover
+    const EDGE = 8;      // min distance from container edges
+
+    // ── shared: compute and apply top/left on a fixed-positioned element ─────
+    function applyPosition(el, anchorRect, { alignRight = false } = {}) {
+        const containerRect = document.querySelector(CONTAINER_SEL).getBoundingClientRect();
+        const elRect        = el.getBoundingClientRect();
+
+        // Vertical — prefer below, flip above, last-resort scroll
+        let top = anchorRect.bottom + GAP;
+        if (top + elRect.height > containerRect.bottom) {
+            top = anchorRect.top - elRect.height - GAP;
+        }
+        if (top < containerRect.top) {
+            top = containerRect.top + EDGE;
+            el.style.maxHeight = `${containerRect.height - EDGE * 2}px`;
+            el.style.overflowY = 'auto';
+        }
+
+        // Horizontal — right- or left-align to anchor, then clamp
+        let left = alignRight
+            ? anchorRect.right  - elRect.width   // right-align  (action menus)
+            : anchorRect.left;                   // left-align   (status dropdown, tooltips)
+
+        left = Math.min(left, containerRect.right  - elRect.width - EDGE);
+        left = Math.max(left, containerRect.left   + EDGE);
+
+        el.style.top  = `${top}px`;
+        el.style.left = `${left}px`;
+    }
+
+    // ── 1. TOOLTIP ────────────────────────────────────────────────────────────
+    const portal = document.createElement('div');
+    portal.id = 'popover-portal';
+    portal.classList.add('tooltip');
+    document.body.appendChild(portal);
+
+    let hideTimer   = null;
+    const HARDCODED = { avatarWrapper: 'Logout' };
+
+    function getTooltipLabel(el) {
+        return el.dataset.tooltip || el.dataset._title || HARDCODED[el.id] || null;
+    }
+
+    document.addEventListener('mouseover', e => {
+        const anchor = e.target.closest('[data-tooltip], [title], #avatarWrapper');
+        if (!anchor) return;
+
+        // Suppress native browser bubble
+        if (anchor.title) {
+            anchor.dataset._title = anchor.title;
+            anchor.removeAttribute('title');
+        }
+
+        const label = getTooltipLabel(anchor);
+        if (!label) return;
+
+        clearTimeout(hideTimer);
+        portal.textContent = label;
+        portal.style.position = 'fixed';
+        portal.style.maxHeight = '';
+        portal.style.overflowY = '';
+        
+
+        // Measure after paint so we get real dimensions
+        requestAnimationFrame(() => {
+            applyPosition(portal, anchor.getBoundingClientRect(), { alignRight: false });
+            portal.classList.add('visible');
+        });
+    });
+
+    document.addEventListener('mouseout', e => {
+        const anchor = e.target.closest('[data-tooltip], [data-_title], #avatarWrapper');
+        if (!anchor) return;
+
+        if (anchor.dataset._title) {
+            anchor.title = anchor.dataset._title;
+            delete anchor.dataset._title;
+        }
+
+        hideTimer = setTimeout(() => portal.classList.remove('visible'), 80);
+    });
+
+    // ── 2. PANEL (menus & dropdowns) ─────────────────────────────────────────
+    // Exposed globally so callers can use it
+    window.showPopover = function ({ anchor, element, alignRight = false, onClose } = {}) {
+        element.style.position = 'fixed';
+        element.style.zIndex   = '10000';
+        element.style.maxHeight = '';
+        element.style.overflowY = '';
+
+        document.body.appendChild(element);
+
+        // Wait one frame for the browser to render & size the element
+        requestAnimationFrame(() => {
+            applyPosition(element, anchor.getBoundingClientRect(), { alignRight });
+        });
+
+        // Dismiss on outside click
+        if (onClose) {
+            setTimeout(() => {
+                function handler(e) {
+                    if (!element.contains(e.target)) {
+                        onClose();
+                        document.removeEventListener('click', handler);
+                    }
+                }
+                document.addEventListener('click', handler);
+            }, 0);
+        }
+    };
+})();
+
+
+
+// ============================================================================
 // State Management
 // ============================================================================
 
@@ -1326,7 +1446,7 @@ function displayProjectIssues(issues) {
                     cursor: pointer;
                     transition: all 0.2s;
                     position: relative;
-                " data-item-id="${issue.itemId}" data-current-status="${issue.status}" title="Click to change status">
+                " data-item-id="${issue.itemId}" data-current-status="${issue.status}">
                     <span style="
                         width: 8px;
                         height: 8px;
@@ -1365,7 +1485,7 @@ function displayProjectIssues(issues) {
                     <a href="${issue.url}" target="_blank" class="issue-title" style="text-decoration: none; color: var(--text-primary);">
                         ${issue.title}
                     </a>
-                    ${issue.repository ? `<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${issue.repository}</div>` : ''}
+                    ${issue.repository ? `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">${issue.repository}</div>` : ''}
                 </td>
                 <td>
                     ${statusBadge}
@@ -1470,7 +1590,7 @@ async function loadRepoIssues(repoFullName, state) {
             row.innerHTML = `
                 <td>
                     <a href="${issue.html_url}" target="_blank" class="issue-title" style="text-decoration:none;color:var(--text-primary);">
-                        #${issue.number} ${issue.title}
+                        ${issue.title} #${issue.number}
                     </a>
                     ${issue.assignees?.length ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${issue.assignees.map(a => '@' + a.login).join(', ')}</div>` : ''}
                 </td>
@@ -1545,21 +1665,12 @@ function showRepoIssueActionsMenu(button) {
     });
     menu.appendChild(toggleItem);
 
-    document.body.appendChild(menu);
-    const btnRect = button.getBoundingClientRect();
-    const cRect = document.querySelector('.container').getBoundingClientRect();
-    menu.style.position = 'fixed';
-    menu.style.zIndex = '10000';
-    setTimeout(() => {
-        const mRect = menu.getBoundingClientRect();
-        let top = btnRect.bottom + 4;
-        let left = btnRect.right - mRect.width;
-        if (left < cRect.left) left = cRect.left + 8;
-        if (top + mRect.height > cRect.bottom) top = btnRect.top - mRect.height - 4;
-        menu.style.top = `${top}px`;
-        menu.style.left = `${left}px`;
-    }, 0);
-    setTimeout(() => document.addEventListener('click', closeIssueActionsMenu), 0);
+    showPopover({
+        anchor: button,
+        element: menu,
+        alignRight: true,
+        onClose: closeIssueActionsMenu
+    });
 }
 
 // ============================================================================
@@ -1863,55 +1974,12 @@ function showIssueActionsMenu(button) {
         menu.appendChild(deleteItem);
     }
 
-    // Append to body instead of cell to prevent cutoff
-    document.body.appendChild(menu);
-
-    // Position the menu properly using fixed positioning
-    const buttonRect = button.getBoundingClientRect();
-    const container = document.querySelector('.container');
-    const containerRect = container.getBoundingClientRect();
-
-    menu.style.position = 'fixed';
-    menu.style.zIndex = '10000';
-
-    // Wait for menu to render to get its dimensions
-    setTimeout(() => {
-        const menuRect = menu.getBoundingClientRect();
-
-        let top = buttonRect.bottom + 4;
-        let left = buttonRect.right - menuRect.width;
-
-        // Check if menu would go off the right edge
-        if (left + menuRect.width > containerRect.right) {
-            left = containerRect.right - menuRect.width - 8;
-        }
-
-        // Make sure it doesn't go off the left edge
-        if (left < containerRect.left) {
-            left = containerRect.left + 8;
-        }
-
-        // Check if menu would go off the bottom
-        if (top + menuRect.height > containerRect.bottom) {
-            // Show above the button instead
-            top = buttonRect.top - menuRect.height - 4;
-        }
-
-        // Make sure it doesn't go off the top
-        if (top < containerRect.top) {
-            top = containerRect.top + 8;
-            menu.style.maxHeight = `${containerRect.height - 16}px`;
-            menu.style.overflowY = 'auto';
-        }
-
-        menu.style.top = `${top}px`;
-        menu.style.left = `${left}px`;
-    }, 0);
-
-    // Close menu when clicking outside
-    setTimeout(() => {
-        document.addEventListener('click', closeIssueActionsMenu);
-    }, 0);
+    showPopover({
+        anchor: button,
+        element: menu,
+        alignRight: true,
+        onClose: closeIssueActionsMenu
+    });
 }
 
 function closeIssueActionsMenu() {
@@ -2286,55 +2354,14 @@ function showStatusDropdown(badgeElement, itemId, currentStatus) {
         dropdown.appendChild(optionDiv);
     });
 
-    document.body.appendChild(dropdown);
-
-    const badgeRect = badgeElement.getBoundingClientRect();
-    const container = document.querySelector('.container');
-    const containerRect = container.getBoundingClientRect();
-
-    dropdown.style.position = 'fixed';
-    dropdown.style.zIndex = '10000';
-
-    let top = badgeRect.bottom + 4;
-    let left = badgeRect.left;
-
-    // Wait for dropdown to render to get its dimensions
-    setTimeout(() => {
-        const dropdownRect = dropdown.getBoundingClientRect();
-
-        // Check if dropdown would go off the right edge
-        if (left + dropdownRect.width > containerRect.right) {
-            left = containerRect.right - dropdownRect.width - 8;
-        }
-
-        // Make sure it doesn't go off the left edge
-        if (left < containerRect.left) {
-            left = containerRect.left + 8;
-        }
-
-        // Check if dropdown would go off the bottom
-        if (top + dropdownRect.height > containerRect.bottom) {
-            // Show above the badge instead
-            top = badgeRect.top - dropdownRect.height - 4;
-        }
-
-        // Make sure it doesn't go off the top
-        if (top < containerRect.top) {
-            // If it doesn't fit above or below, position it at the top with max height
-            top = containerRect.top + 8;
-            dropdown.style.maxHeight = `${containerRect.height - 16}px`;
-            dropdown.style.overflowY = 'auto';
-        }
-
-        dropdown.style.top = `${top}px`;
-        dropdown.style.left = `${left}px`;
-    }, 0);
+    showPopover({
+        anchor: badgeElement,
+        element: dropdown,
+        alignRight: false,
+        onClose: hideStatusDropdown
+    });
 
     currentStatusDropdown = dropdown;
-
-    setTimeout(() => {
-        document.addEventListener('click', handleClickOutside);
-    }, 0);
 }
 
 function hideStatusDropdown() {
