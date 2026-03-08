@@ -212,6 +212,19 @@ When drafting issues, use this structure:
         }
     ];
 
+    // ── Copy Button Factory ────────────────────────────────────────────────
+    function makeCopyBtn(messageDiv) {
+        const btn = document.createElement('button');
+        btn.className = 'ai-copy-btn';
+        btn.title = 'Copy to clipboard';
+        btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+            <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+        </svg>`;
+        btn.addEventListener('click', () => copyText(btn, messageDiv));
+        return btn;
+    }
+
     // ── Render Chat Messages ───────────────────────────────────────────────
     function appendMessage(role, text, streaming = false) {
         const messagesEl = el('aiChatMessages');
@@ -229,13 +242,10 @@ When drafting issues, use this structure:
                 </div>
                 <div class="ai-message-content ${streaming ? 'ai-streaming' : ''}" id="ai-streaming-target">
                     <p class="ai-p">${streaming ? '<span class="ai-cursor">▋</span>' : renderMarkdown(text)}</p>
-                </div>
-                ${!streaming ? `<button class="ai-copy-btn" title="Copy to clipboard" onclick="AI_ASSIST.copyText(this)">
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                    </svg>
-                </button>` : ''}`;
+                </div>`;
+            if (!streaming) {
+                div.appendChild(makeCopyBtn(div));
+            }
         } else {
             div.innerHTML = `
                 <div class="ai-message-content">
@@ -253,14 +263,7 @@ When drafting issues, use this structure:
         if (contentEl) {
             contentEl.innerHTML = `<p class="ai-p">${renderMarkdown(text)}</p>`;
             contentEl.classList.remove('ai-streaming');
-            // Add copy button
-            div.insertAdjacentHTML('beforeend', `
-                <button class="ai-copy-btn" title="Copy to clipboard" onclick="AI_ASSIST.copyText(this)">
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                    </svg>
-                </button>`);
+            div.appendChild(makeCopyBtn(div));
         }
         el('aiChatMessages').scrollTop = el('aiChatMessages').scrollHeight;
     }
@@ -382,8 +385,13 @@ When drafting issues, use this structure:
         badge.innerHTML = `
             <span class="ai-ctx-icon">${icons[type]}</span>
             <span class="ai-ctx-type">${type}</span>
-            <span class="ai-ctx-label" title="${escapeHtml(label || '')}">${escapeHtml((label || '').slice(0, 35))}${(label || '').length > 35 ? '…' : ''}</span>
-            <button class="ai-ctx-clear" onclick="AI_ASSIST.clearContext()" title="Clear context">×</button>`;
+            <span class="ai-ctx-label" title="${escapeHtml(label || '')}">${escapeHtml((label || '').slice(0, 35))}${(label || '').length > 35 ? '…' : ''}</span>`;
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'ai-ctx-clear';
+        clearBtn.title = 'Clear context';
+        clearBtn.textContent = '×';
+        clearBtn.addEventListener('click', clearContext);
+        badge.appendChild(clearBtn);
     }
 
     // ── Panel Toggle ───────────────────────────────────────────────────────
@@ -455,8 +463,8 @@ When drafting issues, use this structure:
     }
 
     // ── Copy helper ────────────────────────────────────────────────────────
-    function copyText(btn) {
-        const content = btn.closest('.ai-message')?.querySelector('.ai-message-content');
+    function copyText(btn, messageDiv) {
+        const content = (messageDiv || btn.closest('.ai-message'))?.querySelector('.ai-message-content');
         if (!content) return;
         const text = content.innerText || content.textContent;
         navigator.clipboard.writeText(text).then(() => {
@@ -479,10 +487,15 @@ When drafting issues, use this structure:
     function renderQuickActions() {
         const container = el('aiQuickActions');
         if (!container) return;
-        container.innerHTML = QUICK_ACTIONS.map(a => `
-            <button class="ai-quick-btn" onclick="AI_ASSIST.runQuickAction('${a.id}')" title="${a.label}">
-                ${escapeHtml(a.label)}
-            </button>`).join('');
+        container.innerHTML = '';
+        QUICK_ACTIONS.forEach(a => {
+            const btn = document.createElement('button');
+            btn.className = 'ai-quick-btn';
+            btn.title = a.label;
+            btn.textContent = a.label;
+            btn.addEventListener('click', () => runQuickAction(a.id));
+            container.appendChild(btn);
+        });
     }
 
     // ── Init ───────────────────────────────────────────────────────────────

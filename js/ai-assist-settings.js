@@ -62,10 +62,15 @@ const AI_ASSIST_SETTINGS = (() => {
         setTimeout(() => { el.style.borderColor = original; }, 2000);
     }
 
-    // Init: load key on startup
-    document.addEventListener('DOMContentLoaded', loadKey);
-    // Also try immediately if DOM is already ready
-    if (document.readyState !== 'loading') loadKey();
+    // Init: load key on startup and bind save button
+    function init() {
+        loadKey();
+        const saveBtn = document.getElementById('aiKeySaveBtn');
+        if (saveBtn) saveBtn.addEventListener('click', saveKey);
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState !== 'loading') init();
 
     return { saveKey, loadKey };
 })();
