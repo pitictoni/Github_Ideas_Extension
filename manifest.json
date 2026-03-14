@@ -1,6 +1,6 @@
 {
   "name": "GitHub Ideas Extension",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "manifest_version": 3,
   "description": "Manage your GitHub Projects and Gists",
   "icons": {
@@ -25,7 +25,6 @@
   "host_permissions": [
     "https://github.com/*",
     "https://api.github.com/*",
-    "http://localhost:5000/*",
     "https://github-oauth-worker.iopy.workers.dev/*"
   ],
   "content_security_policy": {
