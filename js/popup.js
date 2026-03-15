@@ -340,7 +340,11 @@ async function clearStoredToken() {
         'tokenExpiry',
         'repos',
         'selectedRepo',
-        'userData'
+        'userData',
+        'quickCaptureEnabled',
+        'quickCaptureInboxProject',
+        'theme',
+        'tokenExpiry'
     ]);
 }
 
