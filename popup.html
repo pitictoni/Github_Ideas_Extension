@@ -42,6 +42,18 @@
                         1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 4h-1.79q.145.486.22 1" />
                     </svg>
                 </button>
+
+                <button class="btn-icon" id="openBenchmarkModalBtn" title="Start benchmark">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 1a7 7 0 1 0 7 7A7 7 0 0 0 8 1Zm0 2a.75.75 0 0 1 .75.75v3.19l2.28 1.32a.75.75 0 1 1-.75 1.3L7.62 8.02A.75.75 0 0 1 7.25 7.4V3.75A.75.75 0 0 1 8 3Z"/>
+                    </svg>
+                </button>
+                <button class="btn-icon" id="openBenchmarkLogsBtn" title="Benchmark logs">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M0 0h1v15h15v1H0V0Zm14 13H3v-2h11v2Zm0-4H5V7h9v2Zm0-4H8V3h6v2Z"/>
+                    </svg>
+                </button>
+                <span class="benchmark-state-badge" id="benchmarkStateBadge">Idle</span>
             </div>
         </div>
 
@@ -1032,6 +1044,48 @@
             </div>
         </div>
     </div>
+
+    <div id="startBenchmarkModal" class="modal-overlay" style="display: none;">
+        <div class="modal benchmark-modal">
+            <div class="modal-header">
+                <h3>Start Benchmark</h3>
+                <button class="modal-close" id="closeStartBenchmarkModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="editor-section">
+                    <label for="benchmarkTaskSelect" class="section-label">TASK</label>
+                    <select id="benchmarkTaskSelect" class="select">
+                        <option value="" selected disabled>Choose a task...</option>
+                        <option value="create_project_issue">Create issue in project</option>
+                        <option value="create_project_draft">Create draft in project</option>
+                        <option value="create_repo_issue">Create issue in repository</option>
+                    </select>
+                </div>
+                <p class="benchmark-help-text">The next click will start the timer and click counter. Native select changes are counted as click-equivalent interactions so the measured value matches the full workflow more closely.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelStartBenchmark">Cancel</button>
+                <button class="btn btn-primary" id="armBenchmarkBtn">Arm Benchmark</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="benchmarkLogsModal" class="modal-overlay" style="display: none;">
+        <div class="modal benchmark-modal benchmark-logs-modal">
+            <div class="modal-header">
+                <h3>Benchmark Logs</h3>
+                <button class="modal-close" id="closeBenchmarkLogsModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="benchmark-logs-summary" id="benchmarkLogsSummary"></div>
+                <div class="benchmark-logs-list" id="benchmarkLogsList"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="clearBenchmarkLogsBtn">Clear Logs</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>

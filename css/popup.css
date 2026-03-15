@@ -1780,3 +1780,111 @@ input:checked+.slider:before {
 	border-radius: 50%;
 	flex-shrink: 0;
 }
+
+.benchmark-state-badge {
+	padding: 4px 8px;
+	border: 1px solid var(--border-color);
+	border-radius: 999px;
+	font-size: 11px;
+	line-height: 1;
+	color: var(--text-secondary);
+	background: var(--bg-secondary);
+	white-space: nowrap;
+}
+
+.benchmark-state-badge.armed {
+	color: var(--info-text);
+	background: var(--info-bg);
+	border-color: var(--info-border);
+}
+
+.benchmark-state-badge.running {
+	color: var(--success-text);
+	background: var(--success-bg);
+	border-color: var(--success-border);
+}
+
+.benchmark-modal {
+	max-width: 460px;
+}
+
+.benchmark-logs-modal {
+	max-width: 520px;
+}
+
+.benchmark-help-text {
+	margin-top: 8px;
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+
+.benchmark-logs-summary {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	margin-bottom: 14px;
+}
+
+.benchmark-summary-card {
+	padding: 10px;
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	background: var(--bg-secondary);
+}
+
+.benchmark-summary-label {
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+
+.benchmark-summary-value {
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.benchmark-logs-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+.benchmark-log-item {
+	padding: 10px;
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	background: var(--bg-secondary);
+}
+
+.benchmark-log-top {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.benchmark-log-status {
+	font-size: 11px;
+	padding: 2px 7px;
+	border-radius: 999px;
+	border: 1px solid var(--border-color);
+}
+
+.benchmark-log-status.success {
+	color: var(--success-text);
+	background: var(--success-bg);
+	border-color: var(--success-border);
+}
+
+.benchmark-log-status.cancelled {
+	color: var(--error-text);
+	background: var(--error-bg);
+	border-color: var(--error-border);
+}
+
+.benchmark-log-meta,
+.benchmark-log-empty {
+	font-size: 12px;
+	color: var(--text-secondary);
+}

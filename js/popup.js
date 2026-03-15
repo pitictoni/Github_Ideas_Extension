@@ -142,6 +142,316 @@ let userRepositories = [];
 let currentRepoFullName = null;
 let currentRepoIssueState = 'open';
 
+
+// ============================================================================
+// Benchmark Tracking
+// ============================================================================
+
+const BENCHMARK_STORAGE_KEY = 'benchmarkLogs';
+const BENCHMARK_MAX_LOGS = 200;
+
+const benchmarkTracker = {
+    armedTask: null,
+    activeRun: null,
+
+    createId(task)
+    {
+        return `${task}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    },
+
+    async getLogs()
+    {
+        const result = await chrome.storage.local.get([BENCHMARK_STORAGE_KEY]);
+        return Array.isArray(result[BENCHMARK_STORAGE_KEY]) ? result[BENCHMARK_STORAGE_KEY] : [];
+    },
+
+    async saveLogs(logs)
+    {
+        await chrome.storage.local.set({ [BENCHMARK_STORAGE_KEY]: logs.slice(-BENCHMARK_MAX_LOGS) });
+    },
+
+    async appendLog(log)
+    {
+        const logs = await this.getLogs();
+        logs.push(log);
+        await this.saveLogs(logs);
+    },
+
+    arm(task)
+    {
+        this.armedTask = {
+            task,
+            armedAt: Date.now()
+        };
+        updateBenchmarkStateUI();
+    },
+
+    disarm()
+    {
+        this.armedTask = null;
+        updateBenchmarkStateUI();
+    },
+
+    startFromInteraction(interaction)
+    {
+        if (!this.armedTask || this.activeRun)
+        {
+            return;
+        }
+
+        this.activeRun = {
+            id: this.createId(this.armedTask.task),
+            task: this.armedTask.task,
+            platform: 'extension',
+            armedAt: this.armedTask.armedAt,
+            startedAt: interaction?.ts || Date.now(),
+            completedAt: null,
+            durationMs: null,
+            success: false,
+            cancelled: false,
+            cancelReason: null,
+            clickCount: 0,
+            rawClickCount: 0,
+            inputFields: [],
+            steps: [],
+            metadata: {}
+        };
+
+        this.armedTask = null;
+
+        if (interaction)
+        {
+            this.recordInteraction(interaction);
+        }
+
+        updateBenchmarkStateUI();
+    },
+
+    ensureTask(task)
+    {
+        if (this.activeRun?.task === task)
+        {
+            return true;
+        }
+
+        if (this.armedTask?.task === task)
+        {
+            return true;
+        }
+
+        return false;
+    },
+
+    recordInteraction(interaction)
+    {
+        if (!this.activeRun)
+        {
+            return;
+        }
+
+        const entry = {
+            ts: interaction?.ts || Date.now(),
+            type: interaction?.type || 'interaction',
+            target: interaction?.target || null,
+            label: interaction?.label || null,
+            synthetic: !!interaction?.synthetic
+        };
+
+        this.activeRun.steps.push(entry);
+
+        if (entry.type === 'click')
+        {
+            this.activeRun.rawClickCount++;
+            this.activeRun.clickCount++;
+        }
+        else if (entry.type === 'select_change')
+        {
+            this.activeRun.clickCount++;
+        }
+    },
+
+    noteInput(field)
+    {
+        if (!this.activeRun)
+        {
+            return;
+        }
+
+        if (!this.activeRun.inputFields.includes(field))
+        {
+            this.activeRun.inputFields.push(field);
+            this.activeRun.steps.push({
+                ts: Date.now(),
+                type: 'input_started',
+                field
+            });
+        }
+    },
+
+    async complete(metadata = {})
+    {
+        if (!this.activeRun)
+        {
+            return;
+        }
+
+        this.activeRun.completedAt = Date.now();
+        this.activeRun.durationMs = this.activeRun.completedAt - this.activeRun.startedAt;
+        this.activeRun.success = true;
+        this.activeRun.metadata = { ...this.activeRun.metadata, ...metadata };
+        await this.appendLog(this.activeRun);
+        this.activeRun = null;
+        updateBenchmarkStateUI();
+        await refreshBenchmarkLogsIfVisible();
+    },
+
+    async cancel(reason)
+    {
+        if (this.activeRun)
+        {
+            this.activeRun.completedAt = Date.now();
+            this.activeRun.durationMs = this.activeRun.completedAt - this.activeRun.startedAt;
+            this.activeRun.cancelled = true;
+            this.activeRun.cancelReason = reason;
+            await this.appendLog(this.activeRun);
+            this.activeRun = null;
+        }
+        else if (this.armedTask)
+        {
+            this.armedTask = null;
+        }
+
+        updateBenchmarkStateUI();
+        await refreshBenchmarkLogsIfVisible();
+    },
+
+    async clear()
+    {
+        this.activeRun = null;
+        this.armedTask = null;
+        await chrome.storage.local.remove([BENCHMARK_STORAGE_KEY]);
+        updateBenchmarkStateUI();
+        await refreshBenchmarkLogsIfVisible();
+    }
+};
+
+function getBenchmarkTaskLabel(task)
+{
+    const labels = {
+        create_project_issue: 'Create project issue',
+        create_project_draft: 'Create project draft',
+        create_repo_issue: 'Create repository issue'
+    };
+
+    return labels[task] || task;
+}
+
+function updateBenchmarkStateUI()
+{
+    const badge = document.getElementById('benchmarkStateBadge');
+
+    if (!badge)
+    {
+        return;
+    }
+
+    if (benchmarkTracker.activeRun)
+    {
+        badge.textContent = `Running: ${getBenchmarkTaskLabel(benchmarkTracker.activeRun.task)}`;
+        badge.className = 'benchmark-state-badge running';
+        return;
+    }
+
+    if (benchmarkTracker.armedTask)
+    {
+        badge.textContent = `Armed: ${getBenchmarkTaskLabel(benchmarkTracker.armedTask.task)}`;
+        badge.className = 'benchmark-state-badge armed';
+        return;
+    }
+
+    badge.textContent = 'Idle';
+    badge.className = 'benchmark-state-badge';
+}
+
+function formatDurationMs(durationMs)
+{
+    if (typeof durationMs !== 'number')
+    {
+        return '—';
+    }
+
+    return `${(durationMs / 1000).toFixed(2)} s`;
+}
+
+async function renderBenchmarkLogs()
+{
+    const summary = document.getElementById('benchmarkLogsSummary');
+    const list = document.getElementById('benchmarkLogsList');
+
+    if (!summary || !list)
+    {
+        return;
+    }
+
+    const logs = await benchmarkTracker.getLogs();
+    const completed = logs.filter(log => log.success);
+    const avg = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+
+    summary.innerHTML = `
+        <div class="benchmark-summary-card">
+            <div class="benchmark-summary-label">Runs</div>
+            <div class="benchmark-summary-value">${logs.length}</div>
+        </div>
+        <div class="benchmark-summary-card">
+            <div class="benchmark-summary-label">Completed</div>
+            <div class="benchmark-summary-value">${completed.length}</div>
+        </div>
+        <div class="benchmark-summary-card">
+            <div class="benchmark-summary-label">Avg measured clicks</div>
+            <div class="benchmark-summary-value">${avg(completed.map(log => log.clickCount)).toFixed(1)}</div>
+        </div>
+        <div class="benchmark-summary-card">
+            <div class="benchmark-summary-label">Avg time</div>
+            <div class="benchmark-summary-value">${formatDurationMs(avg(completed.map(log => log.durationMs)))}</div>
+        </div>
+    `;
+
+    if (!logs.length)
+    {
+        list.innerHTML = '<div class="benchmark-log-empty">No benchmark runs recorded yet.</div>';
+        return;
+    }
+
+    list.innerHTML = logs.slice().reverse().map(log => `
+        <div class="benchmark-log-item">
+            <div class="benchmark-log-top">
+                <strong>${getBenchmarkTaskLabel(log.task)}</strong>
+                <span class="benchmark-log-status ${log.success ? 'success' : 'cancelled'}">${log.success ? 'Completed' : 'Cancelled'}</span>
+            </div>
+            <div class="benchmark-log-meta">Measured clicks: ${log.clickCount} · Raw clicks: ${log.rawClickCount ?? log.clickCount} · Time: ${formatDurationMs(log.durationMs)}</div>
+            <div class="benchmark-log-meta">Inputs: ${(log.inputFields && log.inputFields.length) ? log.inputFields.join(', ') : 'none'}</div>
+            ${log.cancelReason ? `<div class="benchmark-log-meta">Cancel reason: ${log.cancelReason}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+async function refreshBenchmarkLogsIfVisible()
+{
+    const modal = document.getElementById('benchmarkLogsModal');
+
+    if (modal && modal.style.display === 'flex')
+    {
+        await renderBenchmarkLogs();
+    }
+}
+
+window.debugBenchmarkLogs = async function ()
+{
+    const logs = await benchmarkTracker.getLogs();
+    console.log(logs);
+    return logs;
+};
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -720,6 +1030,29 @@ async function fetchProjectItems(token, projectId) {
 // Call this after any mutation that changes project items (add/remove/convert)
 function invalidateProjectCache(projectId) {
     delete projectItemsCache[projectId];
+}
+
+async function refreshProjectIssuesAfterMutation(projectId, expectedTitle = null, maxAttempts = 5) {
+    let lastItems = [];
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        invalidateProjectCache(projectId);
+        await loadProjectIssues(projectId);
+
+        lastItems = projectItemsCache[projectId] || [];
+
+        if (!expectedTitle) {
+            return true;
+        }
+
+        const found = lastItems.some(item => item?.content?.title === expectedTitle);
+        if (found) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 
@@ -2556,6 +2889,12 @@ async function openAddIssueModal() {
 
 function openChooseAddTypeModal() {
     if (!currentProject) return;
+
+    if (benchmarkTracker.ensureTask('create_project_issue') || benchmarkTracker.ensureTask('create_project_draft'))
+    {
+        benchmarkTracker.recordInteraction({ type: 'modal_open', target: 'chooseAddTypeModal', label: 'choose add type' });
+    }
+
     openModal('chooseAddTypeModal');
 }
 
@@ -2638,11 +2977,21 @@ async function addDraftToProject() {
 
         closeModal('addDraftModal');
 
-        // Reload project issues
         const projectId = currentProject.id;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        invalidateProjectCache(projectId);
-        await loadProjectIssues(projectId);
+        const refreshSucceeded = await refreshProjectIssuesAfterMutation(projectId, title);
+
+        if (!refreshSucceeded) {
+            showStatus('Draft issue added, but the table did not refresh yet. Please refresh once.', 'info');
+        }
+
+        if (benchmarkTracker.ensureTask('create_project_draft'))
+        {
+            await benchmarkTracker.complete({
+                projectId: currentProject?.id || null,
+                projectTitle: currentProject?.title || null,
+                finalType: 'draft'
+            });
+        }
 
     } catch (error) {
         console.error('Error adding draft to project:', error);
@@ -2749,9 +3098,21 @@ async function addIssueToProject() {
         closeModal('addIssueModal');
 
         const projectId = currentProject.id;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        invalidateProjectCache(projectId);
-        await loadProjectIssues(projectId);
+        const refreshSucceeded = await refreshProjectIssuesAfterMutation(projectId, title);
+
+        if (!refreshSucceeded) {
+            showStatus('Issue added to project, but the table did not refresh yet. Please refresh once.', 'info');
+        }
+
+        if (benchmarkTracker.ensureTask('create_project_issue'))
+        {
+            await benchmarkTracker.complete({
+                projectId: currentProject?.id || null,
+                projectTitle: currentProject?.title || null,
+                repository: selectedOption?.value || null,
+                finalType: 'issue'
+            });
+        }
 
     } catch (error) {
         console.error('Error adding issue to project:', error);
@@ -3602,6 +3963,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             await initQuickCapture();
             showStatus('Logged in successfully!', 'success');
 
+            if (benchmarkTracker.ensureTask('create_repo_issue'))
+            {
+                benchmarkTracker.recordInteraction({ type: 'login_success', target: 'loginBtn', label: 'login success' });
+            }
+
         } catch (error) {
             console.error('Login error:', error);
             showStatus('Login failed: ' + error.message, 'error');
@@ -3704,14 +4070,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('newRepoIssueModal').style.display = 'flex';
         setTimeout(() => document.getElementById('newIssueTitle').focus(), 50);
     });
-    document.getElementById('closeNewRepoIssueModal').addEventListener('click', () => {
+    document.getElementById('closeNewRepoIssueModal').addEventListener('click', async () => {
+        if (benchmarkTracker.ensureTask('create_repo_issue'))
+        {
+            await benchmarkTracker.cancel('close_new_repo_issue_modal');
+        }
         document.getElementById('newRepoIssueModal').style.display = 'none';
     });
-    document.getElementById('cancelNewRepoIssue').addEventListener('click', () => {
+    document.getElementById('cancelNewRepoIssue').addEventListener('click', async () => {
+        if (benchmarkTracker.ensureTask('create_repo_issue'))
+        {
+            await benchmarkTracker.cancel('cancel_new_repo_issue_modal');
+        }
         document.getElementById('newRepoIssueModal').style.display = 'none';
     });
-    document.getElementById('newRepoIssueModal').addEventListener('click', (e) => {
-        if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+    document.getElementById('newRepoIssueModal').addEventListener('click', async (e) => {
+        if (e.target === e.currentTarget)
+        {
+            if (benchmarkTracker.ensureTask('create_repo_issue'))
+            {
+                await benchmarkTracker.cancel('dismiss_new_repo_issue_modal');
+            }
+            e.currentTarget.style.display = 'none';
+        }
     });
     document.getElementById('submitNewRepoIssue').addEventListener('click', async () => {
         const title = document.getElementById('newIssueTitle').value.trim();
@@ -3733,6 +4114,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('newRepoIssueModal').style.display = 'none';
             showStatus(`Issue #${issue.number} created`, 'success');
             await loadRepoIssues(currentRepoFullName);
+
+            if (benchmarkTracker.ensureTask('create_repo_issue'))
+            {
+                await benchmarkTracker.complete({
+                    repository: currentRepoFullName,
+                    issueNumber: issue.number,
+                    finalType: 'issue'
+                });
+            }
         } catch (err) {
             showStatus('Failed to create issue: ' + err.message, 'error');
         } finally {
@@ -3828,8 +4218,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('confirmRenameProject').addEventListener('click', renameProject);
 
     // Add issue modal
-    document.getElementById('closeAddIssueModal').addEventListener('click', () => closeModal('addIssueModal'));
-    document.getElementById('cancelAddIssue').addEventListener('click', () => closeModal('addIssueModal'));
+    document.getElementById('closeAddIssueModal').addEventListener('click', async () => {
+        if (benchmarkTracker.ensureTask('create_project_issue'))
+        {
+            await benchmarkTracker.cancel('close_add_issue_modal');
+        }
+        closeModal('addIssueModal');
+    });
+    document.getElementById('cancelAddIssue').addEventListener('click', async () => {
+        if (benchmarkTracker.ensureTask('create_project_issue'))
+        {
+            await benchmarkTracker.cancel('cancel_add_issue_modal');
+        }
+        closeModal('addIssueModal');
+    });
     document.getElementById('confirmAddIssue').addEventListener('click', addIssueToProject);
 
     // Edit issue modal
@@ -3856,17 +4258,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Choose add type modal
     document.getElementById('closeChooseAddTypeModal').addEventListener('click', () => closeModal('chooseAddTypeModal'));
     document.getElementById('chooseAddIssue').addEventListener('click', () => {
+        if (benchmarkTracker.ensureTask('create_project_issue'))
+        {
+            benchmarkTracker.recordInteraction({ type: 'branch_selected', target: 'chooseAddIssue', label: 'issue' });
+        }
         closeModal('chooseAddTypeModal');
         openAddIssueModal();
     });
     document.getElementById('chooseAddDraft').addEventListener('click', () => {
+        if (benchmarkTracker.ensureTask('create_project_draft'))
+        {
+            benchmarkTracker.recordInteraction({ type: 'branch_selected', target: 'chooseAddDraft', label: 'draft' });
+        }
         closeModal('chooseAddTypeModal');
         openAddDraftModal();
     });
 
     // Add draft modal
-    document.getElementById('closeAddDraftModal').addEventListener('click', () => closeModal('addDraftModal'));
-    document.getElementById('cancelAddDraft').addEventListener('click', () => closeModal('addDraftModal'));
+    document.getElementById('closeAddDraftModal').addEventListener('click', async () => {
+        if (benchmarkTracker.ensureTask('create_project_draft'))
+        {
+            await benchmarkTracker.cancel('close_add_draft_modal');
+        }
+        closeModal('addDraftModal');
+    });
+    document.getElementById('cancelAddDraft').addEventListener('click', async () => {
+        if (benchmarkTracker.ensureTask('create_project_draft'))
+        {
+            await benchmarkTracker.cancel('cancel_add_draft_modal');
+        }
+        closeModal('addDraftModal');
+    });
     document.getElementById('confirmAddDraft').addEventListener('click', addDraftToProject);
 
     // Convert draft to issue modal
@@ -3888,6 +4310,106 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     });
+
+
+    document.getElementById('openBenchmarkModalBtn')?.addEventListener('click', () => openModal('startBenchmarkModal'));
+    document.getElementById('closeStartBenchmarkModal')?.addEventListener('click', () => closeModal('startBenchmarkModal'));
+    document.getElementById('cancelStartBenchmark')?.addEventListener('click', () => closeModal('startBenchmarkModal'));
+    document.getElementById('armBenchmarkBtn')?.addEventListener('click', () => {
+        const task = document.getElementById('benchmarkTaskSelect').value;
+        if (!task)
+        {
+            showStatus('Please choose a benchmark task', 'error');
+            return;
+        }
+        benchmarkTracker.arm(task);
+        closeModal('startBenchmarkModal');
+        showStatus(`Benchmark armed: ${getBenchmarkTaskLabel(task)}`, 'info');
+    });
+    document.getElementById('openBenchmarkLogsBtn')?.addEventListener('click', async () => {
+        openModal('benchmarkLogsModal');
+        await renderBenchmarkLogs();
+    });
+    document.getElementById('closeBenchmarkLogsModal')?.addEventListener('click', () => closeModal('benchmarkLogsModal'));
+    document.getElementById('clearBenchmarkLogsBtn')?.addEventListener('click', async () => {
+        await benchmarkTracker.clear();
+        showStatus('Benchmark logs cleared', 'info');
+    });
+
+    document.addEventListener('click', (event) => {
+        const target = event.target.closest('button, a, .add-type-option, .tab-btn, .repo-state-tab, .qc-inbox-name, .modal-close, select');
+
+        if (!target)
+        {
+            return;
+        }
+
+        const ignoredIds = new Set([
+            'openBenchmarkModalBtn',
+            'openBenchmarkLogsBtn',
+            'closeBenchmarkLogsModal',
+            'clearBenchmarkLogsBtn',
+            'closeStartBenchmarkModal',
+            'cancelStartBenchmark',
+            'armBenchmarkBtn'
+        ]);
+
+        if (ignoredIds.has(target.id))
+        {
+            return;
+        }
+
+        const interaction = {
+            ts: Date.now(),
+            type: 'click',
+            target: target.id || target.name || target.className || target.tagName,
+            label: (target.textContent || target.getAttribute('aria-label') || '').trim().slice(0, 80)
+        };
+
+        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
+        {
+            benchmarkTracker.startFromInteraction(interaction);
+            return;
+        }
+
+        benchmarkTracker.recordInteraction(interaction);
+    });
+
+    document.addEventListener('change', (event) => {
+        const target = event.target.closest('select');
+
+        if (!target)
+        {
+            return;
+        }
+
+        const interaction = {
+            ts: Date.now(),
+            type: 'select_change',
+            target: target.id || target.name || 'select',
+            label: target.value,
+            synthetic: true
+        };
+
+        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
+        {
+            benchmarkTracker.startFromInteraction(interaction);
+            return;
+        }
+
+        benchmarkTracker.recordInteraction(interaction);
+    });
+
+    document.addEventListener('input', (event) => {
+        const target = event.target.closest('input, textarea');
+        if (!target)
+        {
+            return;
+        }
+        benchmarkTracker.noteInput(target.id || target.name || 'field');
+    });
+
+    updateBenchmarkStateUI();
 
     // Check for existing authentication
     const tokenData = await getStoredToken();
