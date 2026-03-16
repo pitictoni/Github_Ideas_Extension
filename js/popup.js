@@ -179,17 +179,39 @@ const benchmarkTracker = {
 
     arm(task)
     {
-        this.armedTask = {
-            task,
-            armedAt: Date.now()
-        };
+        this.armedTask = { task, armedAt: Date.now() };
+        this.activeRun = null;
         updateBenchmarkStateUI();
     },
 
-    disarm()
+    async cancel(reason)
     {
+        if (this.activeRun)
+        {
+            this.activeRun.completedAt = Date.now();
+            this.activeRun.durationMs = this.activeRun.completedAt - this.activeRun.startedAt;
+            this.activeRun.cancelled = true;
+            this.activeRun.cancelReason = reason;
+            await this.appendLog(this.activeRun);
+            this.activeRun = null;
+        }
         this.armedTask = null;
         updateBenchmarkStateUI();
+        await refreshBenchmarkLogsIfVisible();
+    },
+
+    async clear()
+    {
+        this.activeRun = null;
+        this.armedTask = null;
+        await chrome.storage.local.remove([BENCHMARK_STORAGE_KEY]);
+        updateBenchmarkStateUI();
+        await refreshBenchmarkLogsIfVisible();
+    },
+
+    ensureTask(task)
+    {
+        return this.activeRun?.task === task || this.armedTask?.task === task;
     },
 
     startFromInteraction(interaction)
@@ -225,21 +247,6 @@ const benchmarkTracker = {
         }
 
         updateBenchmarkStateUI();
-    },
-
-    ensureTask(task)
-    {
-        if (this.activeRun?.task === task)
-        {
-            return true;
-        }
-
-        if (this.armedTask?.task === task)
-        {
-            return true;
-        }
-
-        return false;
     },
 
     recordInteraction(interaction)
@@ -280,11 +287,7 @@ const benchmarkTracker = {
         if (!this.activeRun.inputFields.includes(field))
         {
             this.activeRun.inputFields.push(field);
-            this.activeRun.steps.push({
-                ts: Date.now(),
-                type: 'input_started',
-                field
-            });
+            this.activeRun.steps.push({ ts: Date.now(), type: 'input_started', field });
         }
     },
 
@@ -303,35 +306,6 @@ const benchmarkTracker = {
         this.activeRun = null;
         updateBenchmarkStateUI();
         await refreshBenchmarkLogsIfVisible();
-    },
-
-    async cancel(reason)
-    {
-        if (this.activeRun)
-        {
-            this.activeRun.completedAt = Date.now();
-            this.activeRun.durationMs = this.activeRun.completedAt - this.activeRun.startedAt;
-            this.activeRun.cancelled = true;
-            this.activeRun.cancelReason = reason;
-            await this.appendLog(this.activeRun);
-            this.activeRun = null;
-        }
-        else if (this.armedTask)
-        {
-            this.armedTask = null;
-        }
-
-        updateBenchmarkStateUI();
-        await refreshBenchmarkLogsIfVisible();
-    },
-
-    async clear()
-    {
-        this.activeRun = null;
-        this.armedTask = null;
-        await chrome.storage.local.remove([BENCHMARK_STORAGE_KEY]);
-        updateBenchmarkStateUI();
-        await refreshBenchmarkLogsIfVisible();
     }
 };
 
@@ -340,10 +314,45 @@ function getBenchmarkTaskLabel(task)
     const labels = {
         create_project_issue: 'Create project issue',
         create_project_draft: 'Create project draft',
-        create_repo_issue: 'Create repository issue'
+        create_repo_issue: 'Create repository issue',
+        convert_draft_to_issue: 'Convert draft to issue',
+        move_item_to_project: 'Move item to project',
+        remove_issue_from_project: 'Remove issue from project',
+        delete_repo_issue: 'Delete repository issue',
+        create_project: 'Create project',
+        rename_project: 'Rename project',
+        edit_project_settings: 'Edit project settings',
+        create_gist: 'Create gist',
+        edit_gist: 'Edit gist',
+        add_gist_file: 'Add gist file',
+        rename_gist: 'Rename gist',
+        delete_gist: 'Delete gist',
+        rename_gist_file: 'Rename gist file',
+        delete_gist_file: 'Delete gist file'
     };
 
     return labels[task] || task;
+}
+
+function getCurrentBenchmarkTask()
+{
+    return benchmarkTracker.activeRun?.task || benchmarkTracker.armedTask?.task || null;
+}
+
+async function completeBenchmarkTask(task, metadata = {})
+{
+    if (benchmarkTracker.ensureTask(task))
+    {
+        await benchmarkTracker.complete(metadata);
+    }
+}
+
+async function cancelBenchmarkTask(task, reason)
+{
+    if (benchmarkTracker.ensureTask(task))
+    {
+        await benchmarkTracker.cancel(reason);
+    }
 }
 
 function updateBenchmarkStateUI()
@@ -451,6 +460,183 @@ window.debugBenchmarkLogs = async function ()
     console.log(logs);
     return logs;
 };
+
+
+
+function isBenchmarkControlElement(element)
+{
+    if (!element)
+    {
+        return false;
+    }
+
+    return !!element.closest(
+        '#openBenchmarkModalBtn, #openBenchmarkLogsBtn, #benchmarkStateBadge, #startBenchmarkModal, #benchmarkLogsModal'
+    );
+}
+
+function describeBenchmarkTarget(element)
+{
+    if (!element)
+    {
+        return { target: 'unknown', label: null };
+    }
+
+    const id = element.id ? `#${element.id}` : null;
+    const cls = element.className && typeof element.className === 'string'
+        ? '.' + element.className.trim().split(/\s+/).slice(0, 2).join('.')
+        : null;
+    const label = (element.getAttribute('aria-label') || element.getAttribute('data-tooltip') || element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) || null;
+
+    return {
+        target: id || cls || element.tagName.toLowerCase(),
+        label
+    };
+}
+
+function attachBenchmarkUIHandlers()
+{
+    const openBenchmarkModalBtn = document.getElementById('openBenchmarkModalBtn');
+    const openBenchmarkLogsBtn = document.getElementById('openBenchmarkLogsBtn');
+    const closeStartBenchmarkModal = document.getElementById('closeStartBenchmarkModal');
+    const cancelStartBenchmark = document.getElementById('cancelStartBenchmark');
+    const armBenchmarkBtn = document.getElementById('armBenchmarkBtn');
+    const benchmarkTaskSelect = document.getElementById('benchmarkTaskSelect');
+    const closeBenchmarkLogsModal = document.getElementById('closeBenchmarkLogsModal');
+    const clearBenchmarkLogsBtn = document.getElementById('clearBenchmarkLogsBtn');
+
+    openBenchmarkModalBtn?.addEventListener('click', () =>
+    {
+        openModal('startBenchmarkModal');
+    });
+
+    openBenchmarkLogsBtn?.addEventListener('click', async () =>
+    {
+        await renderBenchmarkLogs();
+        openModal('benchmarkLogsModal');
+    });
+
+    closeStartBenchmarkModal?.addEventListener('click', () => closeModal('startBenchmarkModal'));
+    cancelStartBenchmark?.addEventListener('click', () => closeModal('startBenchmarkModal'));
+
+    armBenchmarkBtn?.addEventListener('click', () =>
+    {
+        const task = benchmarkTaskSelect?.value;
+
+        if (!task)
+        {
+            showStatus('Choose a benchmark task first', 'error');
+            return;
+        }
+
+        benchmarkTracker.arm(task);
+        closeModal('startBenchmarkModal');
+        showStatus(`Benchmark armed: ${getBenchmarkTaskLabel(task)}`, 'success');
+    });
+
+    closeBenchmarkLogsModal?.addEventListener('click', () => closeModal('benchmarkLogsModal'));
+    clearBenchmarkLogsBtn?.addEventListener('click', async () =>
+    {
+        await benchmarkTracker.clear();
+        await renderBenchmarkLogs();
+    });
+
+    document.addEventListener('click', event =>
+    {
+        const target = event.target.closest('button, a, .add-type-option, .repo-state-tab, .tab-btn, .btn-icon, .dropdown-item, .issue-actions-menu-item, .clickable-status-badge');
+
+        if (!target || isBenchmarkControlElement(target))
+        {
+            return;
+        }
+
+        const info = describeBenchmarkTarget(target);
+        const interaction = {
+            ts: Date.now(),
+            type: 'click',
+            target: info.target,
+            label: info.label
+        };
+
+        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
+        {
+            benchmarkTracker.startFromInteraction(interaction);
+            return;
+        }
+
+        benchmarkTracker.recordInteraction(interaction);
+    }, true);
+
+    document.addEventListener('click', event =>
+    {
+        const select = event.target.closest('select');
+
+        if (!select || isBenchmarkControlElement(select))
+        {
+            return;
+        }
+
+        const info = describeBenchmarkTarget(select);
+        const interaction = {
+            ts: Date.now(),
+            type: 'click',
+            target: info.target,
+            label: info.label,
+            synthetic: true
+        };
+
+        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
+        {
+            benchmarkTracker.startFromInteraction(interaction);
+            return;
+        }
+
+        benchmarkTracker.recordInteraction(interaction);
+    }, true);
+
+    document.addEventListener('change', event =>
+    {
+        const select = event.target.closest('select');
+
+        if (!select || isBenchmarkControlElement(select))
+        {
+            return;
+        }
+
+        const selectedText = select.options && select.selectedIndex >= 0
+            ? select.options[select.selectedIndex].textContent.trim()
+            : null;
+
+        const interaction = {
+            ts: Date.now(),
+            type: 'select_change',
+            target: select.id ? `#${select.id}` : 'select',
+            label: selectedText,
+            synthetic: true
+        };
+
+        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
+        {
+            benchmarkTracker.startFromInteraction(interaction);
+            return;
+        }
+
+        benchmarkTracker.recordInteraction(interaction);
+    }, true);
+
+    document.addEventListener('input', event =>
+    {
+        const field = event.target.closest('input, textarea');
+
+        if (!field || isBenchmarkControlElement(field))
+        {
+            return;
+        }
+
+        const fieldName = field.id || field.name || field.placeholder || field.tagName.toLowerCase();
+        benchmarkTracker.noteInput(fieldName);
+    }, true);
+}
 
 // ============================================================================
 // Utility Functions
@@ -1032,29 +1218,6 @@ function invalidateProjectCache(projectId) {
     delete projectItemsCache[projectId];
 }
 
-async function refreshProjectIssuesAfterMutation(projectId, expectedTitle = null, maxAttempts = 5) {
-    let lastItems = [];
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        invalidateProjectCache(projectId);
-        await loadProjectIssues(projectId);
-
-        lastItems = projectItemsCache[projectId] || [];
-
-        if (!expectedTitle) {
-            return true;
-        }
-
-        const found = lastItems.some(item => item?.content?.title === expectedTitle);
-        if (found) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 
 // ============================================================================
 // Modal Management
@@ -1172,6 +1335,7 @@ function openEditGistModal() {
 }
 
 async function saveGist() {
+    const benchmarkTask = currentGist ? 'edit_gist' : 'create_gist';
     const description = document.getElementById('gistDescription').value.trim();
     const filename = document.getElementById('gistFilename').value.trim();
     const content = document.getElementById('gistContent').value.trim();
@@ -1226,6 +1390,12 @@ async function saveGist() {
         }
 
         closeModal('gistEditorModal');
+
+        await completeBenchmarkTask(benchmarkTask, {
+            gistId: currentGist?.id || null,
+            isPublic,
+            filename
+        });
 
         // Re-enable filename field
         document.getElementById('gistFilename').disabled = false;
@@ -1370,6 +1540,11 @@ async function saveNewFile() {
 
         closeModal('addFileModal');
 
+        await completeBenchmarkTask('add_gist_file', {
+            gistId: currentGist?.id || null,
+            filename
+        });
+
     } catch (error) {
         console.error('Error adding file:', error);
         showStatus('Failed to add file: ' + error.message, 'error');
@@ -1431,6 +1606,10 @@ async function deleteCurrentGist() {
 
                 await loadGists();
                 hideGistPreview();
+
+                await completeBenchmarkTask('delete_gist', {
+                    gistName
+                });
 
             } catch (error) {
                 console.error('Error deleting gist:', error);
@@ -1496,6 +1675,11 @@ async function renameGist() {
 
         closeModal('renameGistModal');
 
+        await completeBenchmarkTask('rename_gist', {
+            gistId: currentGist?.id || null,
+            newDescription
+        });
+
     } catch (error) {
         console.error('Error renaming gist:', error);
         showStatus('Failed to rename gist: ' + error.message, 'error');
@@ -1534,6 +1718,11 @@ async function deleteCurrentFile() {
                 displayGistPreview(currentGist);
 
                 closeModal('fileEditorModal');
+
+                await completeBenchmarkTask('delete_gist_file', {
+                    gistId: currentGist?.id || null,
+                    filename: currentFile
+                });
 
             } catch (error) {
                 console.error('Error deleting file:', error);
@@ -1607,6 +1796,12 @@ async function renameFile() {
         displayGistPreview(currentGist);
 
         closeModal('renameFileModal');
+
+        await completeBenchmarkTask('rename_gist_file', {
+            gistId: currentGist?.id || null,
+            oldFilename: currentFile,
+            newFilename
+        });
 
         // Update the file editor modal with new filename
         document.getElementById('currentFileName').textContent = newFilename;
@@ -2201,6 +2396,14 @@ async function convertDraftToIssue() {
         invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
+        await completeBenchmarkTask('convert_draft_to_issue', {
+            projectId: currentProject?.id || null,
+            targetRepository: selectedOption?.value || null,
+            targetProjectId,
+            targetProjectName: targetName,
+            title
+        });
+
     } catch (error) {
         console.error('Error converting draft to issue:', error);
         showStatus('Failed to convert draft: ' + error.message, 'error');
@@ -2459,6 +2662,13 @@ async function moveToProject() {
         invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
+        await completeBenchmarkTask('move_item_to_project', {
+            sourceProjectId: currentProject?.id || null,
+            targetProjectId,
+            targetProjectName: targetName,
+            itemType: moveItemType
+        });
+
     } catch (err) {
         console.error('Move error:', err);
         showStatus('Failed to move: ' + err.message, 'error');
@@ -2471,6 +2681,7 @@ async function removeIssueFromProject(itemId) {
     if (!currentProject) return;
 
     if (!confirm('Remove this issue from the project? The issue will still exist on GitHub.')) {
+        await cancelBenchmarkTask('remove_issue_from_project', 'confirm_remove_issue_from_project_declined');
         return;
     }
 
@@ -2521,6 +2732,11 @@ async function removeIssueFromProject(itemId) {
         // Reload the project issues
         invalidateProjectCache(currentProject.id);
         await loadProjectIssues(currentProject.id);
+
+        await completeBenchmarkTask('remove_issue_from_project', {
+            projectId: currentProject?.id || null,
+            itemId
+        });
 
     } catch (error) {
         console.error('Error removing issue from project:', error);
@@ -2605,11 +2821,19 @@ async function deleteIssueCompletely(issueUrl, issueTitle) {
 
         showStatus('Issue deleted permanently', 'success');
 
-        // Reload the project issues
-        if (currentProject) {
+        if (currentMode === 'repo' && currentRepoFullName) {
+            await loadRepoIssues(currentRepoFullName);
+        } else if (currentProject) {
             invalidateProjectCache(currentProject.id);
             await loadProjectIssues(currentProject.id);
         }
+
+        await completeBenchmarkTask('delete_repo_issue', {
+            owner,
+            repo,
+            issueNumber: Number(issueNumber),
+            issueTitle
+        });
 
     } catch (error) {
         console.error('Error deleting issue:', error);
@@ -2889,12 +3113,6 @@ async function openAddIssueModal() {
 
 function openChooseAddTypeModal() {
     if (!currentProject) return;
-
-    if (benchmarkTracker.ensureTask('create_project_issue') || benchmarkTracker.ensureTask('create_project_draft'))
-    {
-        benchmarkTracker.recordInteraction({ type: 'modal_open', target: 'chooseAddTypeModal', label: 'choose add type' });
-    }
-
     openModal('chooseAddTypeModal');
 }
 
@@ -2977,21 +3195,17 @@ async function addDraftToProject() {
 
         closeModal('addDraftModal');
 
+        // Reload project issues
         const projectId = currentProject.id;
-        const refreshSucceeded = await refreshProjectIssuesAfterMutation(projectId, title);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        invalidateProjectCache(projectId);
+        await loadProjectIssues(projectId);
 
-        if (!refreshSucceeded) {
-            showStatus('Draft issue added, but the table did not refresh yet. Please refresh once.', 'info');
-        }
-
-        if (benchmarkTracker.ensureTask('create_project_draft'))
-        {
-            await benchmarkTracker.complete({
-                projectId: currentProject?.id || null,
-                projectTitle: currentProject?.title || null,
-                finalType: 'draft'
-            });
-        }
+        await completeBenchmarkTask('create_project_draft', {
+            projectId: currentProject?.id || null,
+            title,
+            hasBody: !!body
+        });
 
     } catch (error) {
         console.error('Error adding draft to project:', error);
@@ -3098,21 +3312,16 @@ async function addIssueToProject() {
         closeModal('addIssueModal');
 
         const projectId = currentProject.id;
-        const refreshSucceeded = await refreshProjectIssuesAfterMutation(projectId, title);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        invalidateProjectCache(projectId);
+        await loadProjectIssues(projectId);
 
-        if (!refreshSucceeded) {
-            showStatus('Issue added to project, but the table did not refresh yet. Please refresh once.', 'info');
-        }
-
-        if (benchmarkTracker.ensureTask('create_project_issue'))
-        {
-            await benchmarkTracker.complete({
-                projectId: currentProject?.id || null,
-                projectTitle: currentProject?.title || null,
-                repository: selectedOption?.value || null,
-                finalType: 'issue'
-            });
-        }
+        await completeBenchmarkTask('create_project_issue', {
+            projectId: currentProject?.id || null,
+            repository: selectedOption?.value || null,
+            title,
+            hasBody: !!body
+        });
 
     } catch (error) {
         console.error('Error adding issue to project:', error);
@@ -3204,6 +3413,11 @@ async function renameProject() {
         }
 
         closeModal('renameProjectModal');
+
+        await completeBenchmarkTask('rename_project', {
+            projectId: currentProject?.id || null,
+            newTitle
+        });
 
     } catch (error) {
         console.error('Error renaming project:', error);
@@ -3435,6 +3649,13 @@ async function createNewProject() {
         // Trigger change event to load the project
         await loadProjectIssues(newProjectId);
 
+        await completeBenchmarkTask('create_project', {
+            projectId: newProjectId,
+            title,
+            linkedRepositoryId: selectedRepoNodeId || null,
+            isPublic
+        });
+
     } catch (error) {
         console.error('Error creating project:', error);
         showStatus('Failed to create project: ' + error.message, 'error');
@@ -3532,6 +3753,12 @@ async function saveProjectEdits() {
         }
 
         closeModal('editProjectModal');
+
+        await completeBenchmarkTask('edit_project_settings', {
+            projectId: currentProject?.id || null,
+            isPublic,
+            descriptionLength: newDescription.length
+        });
 
     } catch (error) {
         console.error('Error updating project:', error);
@@ -3963,11 +4190,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             await initQuickCapture();
             showStatus('Logged in successfully!', 'success');
 
-            if (benchmarkTracker.ensureTask('create_repo_issue'))
-            {
-                benchmarkTracker.recordInteraction({ type: 'login_success', target: 'loginBtn', label: 'login success' });
-            }
-
         } catch (error) {
             console.error('Login error:', error);
             showStatus('Login failed: ' + error.message, 'error');
@@ -3992,6 +4214,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Tab switching
+    attachBenchmarkUIHandlers();
+    updateBenchmarkStateUI();
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -4070,29 +4295,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('newRepoIssueModal').style.display = 'flex';
         setTimeout(() => document.getElementById('newIssueTitle').focus(), 50);
     });
-    document.getElementById('closeNewRepoIssueModal').addEventListener('click', async () => {
-        if (benchmarkTracker.ensureTask('create_repo_issue'))
-        {
-            await benchmarkTracker.cancel('close_new_repo_issue_modal');
-        }
+    document.getElementById('closeNewRepoIssueModal').addEventListener('click', () => {
         document.getElementById('newRepoIssueModal').style.display = 'none';
     });
-    document.getElementById('cancelNewRepoIssue').addEventListener('click', async () => {
-        if (benchmarkTracker.ensureTask('create_repo_issue'))
-        {
-            await benchmarkTracker.cancel('cancel_new_repo_issue_modal');
-        }
+    document.getElementById('cancelNewRepoIssue').addEventListener('click', () => {
         document.getElementById('newRepoIssueModal').style.display = 'none';
     });
-    document.getElementById('newRepoIssueModal').addEventListener('click', async (e) => {
-        if (e.target === e.currentTarget)
-        {
-            if (benchmarkTracker.ensureTask('create_repo_issue'))
-            {
-                await benchmarkTracker.cancel('dismiss_new_repo_issue_modal');
-            }
-            e.currentTarget.style.display = 'none';
-        }
+    document.getElementById('newRepoIssueModal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
     });
     document.getElementById('submitNewRepoIssue').addEventListener('click', async () => {
         const title = document.getElementById('newIssueTitle').value.trim();
@@ -4114,15 +4324,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('newRepoIssueModal').style.display = 'none';
             showStatus(`Issue #${issue.number} created`, 'success');
             await loadRepoIssues(currentRepoFullName);
-
-            if (benchmarkTracker.ensureTask('create_repo_issue'))
-            {
-                await benchmarkTracker.complete({
-                    repository: currentRepoFullName,
-                    issueNumber: issue.number,
-                    finalType: 'issue'
-                });
-            }
+            await completeBenchmarkTask('create_repo_issue', {
+                repoFullName: currentRepoFullName,
+                issueNumber: issue.number,
+                title
+            });
         } catch (err) {
             showStatus('Failed to create issue: ' + err.message, 'error');
         } finally {
@@ -4174,19 +4380,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('deleteGistBtn').addEventListener('click', deleteCurrentGist);
 
     // Gist editor modal
-    document.getElementById('closeGistEditorModal').addEventListener('click', () => {
+    document.getElementById('closeGistEditorModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('create_gist', 'close_gist_editor_modal');
+        await cancelBenchmarkTask('edit_gist', 'close_gist_editor_modal');
         closeModal('gistEditorModal');
         document.getElementById('gistFilename').disabled = false;
     });
-    document.getElementById('cancelGistEditor').addEventListener('click', () => {
+    document.getElementById('cancelGistEditor').addEventListener('click', async () => {
+        await cancelBenchmarkTask('create_gist', 'cancel_gist_editor_modal');
+        await cancelBenchmarkTask('edit_gist', 'cancel_gist_editor_modal');
         closeModal('gistEditorModal');
         document.getElementById('gistFilename').disabled = false;
     });
     document.getElementById('saveGist').addEventListener('click', saveGist);
 
     // Add file modal
-    document.getElementById('closeAddFileModal').addEventListener('click', () => closeModal('addFileModal'));
-    document.getElementById('cancelAddFile').addEventListener('click', () => closeModal('addFileModal'));
+    document.getElementById('closeAddFileModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('add_gist_file', 'close_add_file_modal');
+        closeModal('addFileModal');
+    });
+    document.getElementById('cancelAddFile').addEventListener('click', async () => {
+        await cancelBenchmarkTask('add_gist_file', 'cancel_add_file_modal');
+        closeModal('addFileModal');
+    });
     document.getElementById('saveNewFile').addEventListener('click', saveNewFile);
 
     // File editor modal
@@ -4203,33 +4419,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('confirmDelete').addEventListener('click', confirmDeleteAction);
 
     // Rename gist modal
-    document.getElementById('closeRenameGistModal').addEventListener('click', () => closeModal('renameGistModal'));
-    document.getElementById('cancelRenameGist').addEventListener('click', () => closeModal('renameGistModal'));
+    document.getElementById('closeRenameGistModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('rename_gist', 'close_rename_gist_modal');
+        closeModal('renameGistModal');
+    });
+    document.getElementById('cancelRenameGist').addEventListener('click', async () => {
+        await cancelBenchmarkTask('rename_gist', 'cancel_rename_gist_modal');
+        closeModal('renameGistModal');
+    });
     document.getElementById('confirmRenameGist').addEventListener('click', renameGist);
 
     // Rename file modal
-    document.getElementById('closeRenameFileModal').addEventListener('click', () => closeModal('renameFileModal'));
-    document.getElementById('cancelRenameFile').addEventListener('click', () => closeModal('renameFileModal'));
+    document.getElementById('closeRenameFileModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('rename_gist_file', 'close_rename_file_modal');
+        closeModal('renameFileModal');
+    });
+    document.getElementById('cancelRenameFile').addEventListener('click', async () => {
+        await cancelBenchmarkTask('rename_gist_file', 'cancel_rename_file_modal');
+        closeModal('renameFileModal');
+    });
     document.getElementById('confirmRenameFile').addEventListener('click', renameFile);
 
     // Rename project modal
-    document.getElementById('closeRenameProjectModal').addEventListener('click', () => closeModal('renameProjectModal'));
-    document.getElementById('cancelRenameProject').addEventListener('click', () => closeModal('renameProjectModal'));
+    document.getElementById('closeRenameProjectModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('rename_project', 'close_rename_project_modal');
+        closeModal('renameProjectModal');
+    });
+    document.getElementById('cancelRenameProject').addEventListener('click', async () => {
+        await cancelBenchmarkTask('rename_project', 'cancel_rename_project_modal');
+        closeModal('renameProjectModal');
+    });
     document.getElementById('confirmRenameProject').addEventListener('click', renameProject);
 
     // Add issue modal
     document.getElementById('closeAddIssueModal').addEventListener('click', async () => {
-        if (benchmarkTracker.ensureTask('create_project_issue'))
-        {
-            await benchmarkTracker.cancel('close_add_issue_modal');
-        }
+        await cancelBenchmarkTask('create_project_issue', 'close_add_issue_modal');
         closeModal('addIssueModal');
     });
     document.getElementById('cancelAddIssue').addEventListener('click', async () => {
-        if (benchmarkTracker.ensureTask('create_project_issue'))
-        {
-            await benchmarkTracker.cancel('cancel_add_issue_modal');
-        }
+        await cancelBenchmarkTask('create_project_issue', 'cancel_add_issue_modal');
         closeModal('addIssueModal');
     });
     document.getElementById('confirmAddIssue').addEventListener('click', addIssueToProject);
@@ -4240,13 +4468,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('confirmEditIssue').addEventListener('click', saveIssueEdits);
 
     // Create project modal
-    document.getElementById('closeCreateProjectModal').addEventListener('click', () => closeModal('createProjectModal'));
-    document.getElementById('cancelCreateProject').addEventListener('click', () => closeModal('createProjectModal'));
+    document.getElementById('closeCreateProjectModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('create_project', 'close_create_project_modal');
+        closeModal('createProjectModal');
+    });
+    document.getElementById('cancelCreateProject').addEventListener('click', async () => {
+        await cancelBenchmarkTask('create_project', 'cancel_create_project_modal');
+        closeModal('createProjectModal');
+    });
     document.getElementById('confirmCreateProject').addEventListener('click', createNewProject);
 
     // Edit project modal
-    document.getElementById('closeEditProjectModal').addEventListener('click', () => closeModal('editProjectModal'));
-    document.getElementById('cancelEditProject').addEventListener('click', () => closeModal('editProjectModal'));
+    document.getElementById('closeEditProjectModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('edit_project_settings', 'close_edit_project_modal');
+        closeModal('editProjectModal');
+    });
+    document.getElementById('cancelEditProject').addEventListener('click', async () => {
+        await cancelBenchmarkTask('edit_project_settings', 'cancel_edit_project_modal');
+        closeModal('editProjectModal');
+    });
     document.getElementById('confirmEditProject').addEventListener('click', saveProjectEdits);
 
     // Project actions
@@ -4258,47 +4498,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Choose add type modal
     document.getElementById('closeChooseAddTypeModal').addEventListener('click', () => closeModal('chooseAddTypeModal'));
     document.getElementById('chooseAddIssue').addEventListener('click', () => {
-        if (benchmarkTracker.ensureTask('create_project_issue'))
-        {
-            benchmarkTracker.recordInteraction({ type: 'branch_selected', target: 'chooseAddIssue', label: 'issue' });
-        }
         closeModal('chooseAddTypeModal');
         openAddIssueModal();
     });
     document.getElementById('chooseAddDraft').addEventListener('click', () => {
-        if (benchmarkTracker.ensureTask('create_project_draft'))
-        {
-            benchmarkTracker.recordInteraction({ type: 'branch_selected', target: 'chooseAddDraft', label: 'draft' });
-        }
         closeModal('chooseAddTypeModal');
         openAddDraftModal();
     });
 
     // Add draft modal
     document.getElementById('closeAddDraftModal').addEventListener('click', async () => {
-        if (benchmarkTracker.ensureTask('create_project_draft'))
-        {
-            await benchmarkTracker.cancel('close_add_draft_modal');
-        }
+        await cancelBenchmarkTask('create_project_draft', 'close_add_draft_modal');
         closeModal('addDraftModal');
     });
     document.getElementById('cancelAddDraft').addEventListener('click', async () => {
-        if (benchmarkTracker.ensureTask('create_project_draft'))
-        {
-            await benchmarkTracker.cancel('cancel_add_draft_modal');
-        }
+        await cancelBenchmarkTask('create_project_draft', 'cancel_add_draft_modal');
         closeModal('addDraftModal');
     });
     document.getElementById('confirmAddDraft').addEventListener('click', addDraftToProject);
 
     // Convert draft to issue modal
-    document.getElementById('closeConvertDraftModal').addEventListener('click', () => closeModal('convertDraftModal'));
-    document.getElementById('cancelConvertDraft').addEventListener('click', () => closeModal('convertDraftModal'));
+    document.getElementById('closeConvertDraftModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('convert_draft_to_issue', 'close_convert_draft_modal');
+        closeModal('convertDraftModal');
+    });
+    document.getElementById('cancelConvertDraft').addEventListener('click', async () => {
+        await cancelBenchmarkTask('convert_draft_to_issue', 'cancel_convert_draft_modal');
+        closeModal('convertDraftModal');
+    });
     document.getElementById('confirmConvertDraft').addEventListener('click', convertDraftToIssue);
 
     // Move to project modal
-    document.getElementById('closeMoveToProjectModal').addEventListener('click', () => closeModal('moveToProjectModal'));
-    document.getElementById('cancelMoveToProject').addEventListener('click', () => closeModal('moveToProjectModal'));
+    document.getElementById('closeMoveToProjectModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('move_item_to_project', 'close_move_to_project_modal');
+        closeModal('moveToProjectModal');
+    });
+    document.getElementById('cancelMoveToProject').addEventListener('click', async () => {
+        await cancelBenchmarkTask('move_item_to_project', 'cancel_move_to_project_modal');
+        closeModal('moveToProjectModal');
+    });
     document.getElementById('confirmMoveToProject').addEventListener('click', moveToProject);
 
     // Close modals on overlay click
@@ -4310,106 +4548,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     });
-
-
-    document.getElementById('openBenchmarkModalBtn')?.addEventListener('click', () => openModal('startBenchmarkModal'));
-    document.getElementById('closeStartBenchmarkModal')?.addEventListener('click', () => closeModal('startBenchmarkModal'));
-    document.getElementById('cancelStartBenchmark')?.addEventListener('click', () => closeModal('startBenchmarkModal'));
-    document.getElementById('armBenchmarkBtn')?.addEventListener('click', () => {
-        const task = document.getElementById('benchmarkTaskSelect').value;
-        if (!task)
-        {
-            showStatus('Please choose a benchmark task', 'error');
-            return;
-        }
-        benchmarkTracker.arm(task);
-        closeModal('startBenchmarkModal');
-        showStatus(`Benchmark armed: ${getBenchmarkTaskLabel(task)}`, 'info');
-    });
-    document.getElementById('openBenchmarkLogsBtn')?.addEventListener('click', async () => {
-        openModal('benchmarkLogsModal');
-        await renderBenchmarkLogs();
-    });
-    document.getElementById('closeBenchmarkLogsModal')?.addEventListener('click', () => closeModal('benchmarkLogsModal'));
-    document.getElementById('clearBenchmarkLogsBtn')?.addEventListener('click', async () => {
-        await benchmarkTracker.clear();
-        showStatus('Benchmark logs cleared', 'info');
-    });
-
-    document.addEventListener('click', (event) => {
-        const target = event.target.closest('button, a, .add-type-option, .tab-btn, .repo-state-tab, .qc-inbox-name, .modal-close, select');
-
-        if (!target)
-        {
-            return;
-        }
-
-        const ignoredIds = new Set([
-            'openBenchmarkModalBtn',
-            'openBenchmarkLogsBtn',
-            'closeBenchmarkLogsModal',
-            'clearBenchmarkLogsBtn',
-            'closeStartBenchmarkModal',
-            'cancelStartBenchmark',
-            'armBenchmarkBtn'
-        ]);
-
-        if (ignoredIds.has(target.id))
-        {
-            return;
-        }
-
-        const interaction = {
-            ts: Date.now(),
-            type: 'click',
-            target: target.id || target.name || target.className || target.tagName,
-            label: (target.textContent || target.getAttribute('aria-label') || '').trim().slice(0, 80)
-        };
-
-        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
-        {
-            benchmarkTracker.startFromInteraction(interaction);
-            return;
-        }
-
-        benchmarkTracker.recordInteraction(interaction);
-    });
-
-    document.addEventListener('change', (event) => {
-        const target = event.target.closest('select');
-
-        if (!target)
-        {
-            return;
-        }
-
-        const interaction = {
-            ts: Date.now(),
-            type: 'select_change',
-            target: target.id || target.name || 'select',
-            label: target.value,
-            synthetic: true
-        };
-
-        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
-        {
-            benchmarkTracker.startFromInteraction(interaction);
-            return;
-        }
-
-        benchmarkTracker.recordInteraction(interaction);
-    });
-
-    document.addEventListener('input', (event) => {
-        const target = event.target.closest('input, textarea');
-        if (!target)
-        {
-            return;
-        }
-        benchmarkTracker.noteInput(target.id || target.name || 'field');
-    });
-
-    updateBenchmarkStateUI();
 
     // Check for existing authentication
     const tokenData = await getStoredToken();

@@ -1782,45 +1782,30 @@ input:checked+.slider:before {
 }
 
 .benchmark-state-badge {
-	padding: 4px 8px;
-	border: 1px solid var(--border-color);
-	border-radius: 999px;
 	font-size: 11px;
-	line-height: 1;
+	padding: 4px 8px;
+	border-radius: 999px;
+	border: 1px solid var(--border-color);
 	color: var(--text-secondary);
 	background: var(--bg-secondary);
 	white-space: nowrap;
 }
 
 .benchmark-state-badge.armed {
-	color: var(--info-text);
-	background: var(--info-bg);
-	border-color: var(--info-border);
+	color: var(--accent-color);
+	border-color: var(--accent-color);
+	background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-secondary));
 }
 
 .benchmark-state-badge.running {
 	color: var(--success-text);
-	background: var(--success-bg);
 	border-color: var(--success-border);
+	background: var(--success-bg);
 }
 
-.benchmark-modal {
-	max-width: 460px;
-}
-
-.benchmark-logs-modal {
-	max-width: 520px;
-}
-
-.benchmark-help-text {
-	margin-top: 8px;
-	font-size: 12px;
-	color: var(--text-secondary);
-}
-
-.benchmark-logs-summary {
+.benchmark-summary-grid {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 10px;
 	margin-bottom: 14px;
 }
@@ -1833,12 +1818,13 @@ input:checked+.slider:before {
 }
 
 .benchmark-summary-label {
-	font-size: 12px;
+	font-size: 11px;
 	color: var(--text-secondary);
+	margin-bottom: 4px;
 }
 
 .benchmark-summary-value {
-	font-size: 18px;
+	font-size: 16px;
 	font-weight: 600;
 }
 
@@ -1846,8 +1832,8 @@ input:checked+.slider:before {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	max-height: 280px;
-	overflow-y: auto;
+	max-height: 320px;
+	overflow: auto;
 }
 
 .benchmark-log-item {
@@ -1860,31 +1846,35 @@ input:checked+.slider:before {
 .benchmark-log-top {
 	display: flex;
 	justify-content: space-between;
-	gap: 8px;
+	gap: 10px;
 	margin-bottom: 4px;
+}
+
+.benchmark-log-meta {
+	font-size: 12px;
+	color: var(--text-secondary);
 }
 
 .benchmark-log-status {
 	font-size: 11px;
-	padding: 2px 7px;
+	padding: 2px 8px;
 	border-radius: 999px;
-	border: 1px solid var(--border-color);
 }
 
 .benchmark-log-status.success {
-	color: var(--success-text);
 	background: var(--success-bg);
-	border-color: var(--success-border);
+	color: var(--success-text);
 }
 
 .benchmark-log-status.cancelled {
-	color: var(--error-text);
 	background: var(--error-bg);
-	border-color: var(--error-border);
+	color: var(--error-text);
 }
 
-.benchmark-log-meta,
 .benchmark-log-empty {
-	font-size: 12px;
+	padding: 12px;
+	text-align: center;
 	color: var(--text-secondary);
+	border: 1px dashed var(--border-color);
+	border-radius: 8px;
 }
