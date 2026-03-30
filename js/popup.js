@@ -4,16 +4,21 @@ const CONFIG = {
     REDIRECT_URI: chrome.identity.getRedirectURL()
 };
 
+// ============================================================================
+// Anonymous Participant ID
+// ============================================================================
 
 async function getParticipantId() {
     const result = await chrome.storage.local.get(['participantId']);
     if (result.participantId) return result.participantId;
- 
-    // Fallback: generate here if background.js didn't run yet
     const id = crypto.randomUUID();
     await chrome.storage.local.set({ participantId: id });
     return id;
 }
+
+// ============================================================================
+// Auto-start benchmark for a task (no manual arming needed)
+// ============================================================================
 
 // ============================================================================
 // showPopover — unified positioning engine for tooltips, menus & dropdowns
@@ -186,12 +191,12 @@ const benchmarkTracker = {
         const participantId = await getParticipantId();
         const enrichedLog = { ...log, participantId };
 
-        // Save full log locally
+        // Save locally
         const logs = await this.getLogs();
         logs.push(enrichedLog);
         await this.saveLogs(logs);
 
-        // Send to D1 — strip metadata to avoid leaking titles/names
+        // Send to Cloudflare D1 — strip metadata, fire and forget
         const { metadata, ...safeLog } = enrichedLog;
         fetch(`${CONFIG.BACKEND_URL}/api/benchmark`, {
             method: 'POST',
@@ -313,7 +318,7 @@ const benchmarkTracker = {
         }
     },
 
-    async complete(metadata = {})
+    async complete()
     {
         if (!this.activeRun)
         {
@@ -323,13 +328,46 @@ const benchmarkTracker = {
         this.activeRun.completedAt = Date.now();
         this.activeRun.durationMs = this.activeRun.completedAt - this.activeRun.startedAt;
         this.activeRun.success = true;
-        this.activeRun.metadata = { ...this.activeRun.metadata, ...metadata };
         await this.appendLog(this.activeRun);
         this.activeRun = null;
         updateBenchmarkStateUI();
         await refreshBenchmarkLogsIfVisible();
     }
 };
+
+// ============================================================================
+// Auto-start benchmark (no manual arming needed)
+// ============================================================================
+
+function autoStartBenchmark(task) {
+    // Don't overwrite a run already in progress
+    if (benchmarkTracker.activeRun) return;
+
+    // Start the run and count the opening button click immediately
+    benchmarkTracker.activeRun = {
+        id: benchmarkTracker.createId(task),
+        task,
+        platform: 'extension',
+        armedAt: Date.now(),
+        startedAt: Date.now(),
+        completedAt: null,
+        durationMs: null,
+        success: false,
+        cancelled: false,
+        cancelReason: null,
+        clickCount: 1,      // count the button click that triggered this
+        rawClickCount: 1,
+        inputFields: [],
+        steps: [{
+            ts: Date.now(),
+            type: 'click',
+            target: `auto_start:${task}`,
+            synthetic: false
+        }]
+    };
+
+    benchmarkTracker.armedTask = null;
+}
 
 function getBenchmarkTaskLabel(task)
 {
@@ -361,11 +399,11 @@ function getCurrentBenchmarkTask()
     return benchmarkTracker.activeRun?.task || benchmarkTracker.armedTask?.task || null;
 }
 
-async function completeBenchmarkTask(task, metadata = {})
+async function completeBenchmarkTask(task)
 {
     if (benchmarkTracker.ensureTask(task))
     {
-        await benchmarkTracker.complete(metadata);
+        await benchmarkTracker.complete();
     }
 }
 
@@ -379,29 +417,7 @@ async function cancelBenchmarkTask(task, reason)
 
 function updateBenchmarkStateUI()
 {
-    const badge = document.getElementById('benchmarkStateBadge');
-
-    if (!badge)
-    {
-        return;
-    }
-
-    if (benchmarkTracker.activeRun)
-    {
-        badge.textContent = `Running: ${getBenchmarkTaskLabel(benchmarkTracker.activeRun.task)}`;
-        badge.className = 'benchmark-state-badge running';
-        return;
-    }
-
-    if (benchmarkTracker.armedTask)
-    {
-        badge.textContent = `Armed: ${getBenchmarkTaskLabel(benchmarkTracker.armedTask.task)}`;
-        badge.className = 'benchmark-state-badge armed';
-        return;
-    }
-
-    badge.textContent = 'Idle';
-    badge.className = 'benchmark-state-badge';
+    // No-op — benchmark UI is hidden from users; tracking is automatic
 }
 
 function formatDurationMs(durationMs)
@@ -518,73 +534,26 @@ function describeBenchmarkTarget(element)
 
 function attachBenchmarkUIHandlers()
 {
-    const openBenchmarkModalBtn = document.getElementById('openBenchmarkModalBtn');
-    const openBenchmarkLogsBtn = document.getElementById('openBenchmarkLogsBtn');
-    const closeStartBenchmarkModal = document.getElementById('closeStartBenchmarkModal');
-    const cancelStartBenchmark = document.getElementById('cancelStartBenchmark');
-    const armBenchmarkBtn = document.getElementById('armBenchmarkBtn');
-    const benchmarkTaskSelect = document.getElementById('benchmarkTaskSelect');
-    const closeBenchmarkLogsModal = document.getElementById('closeBenchmarkLogsModal');
-    const clearBenchmarkLogsBtn = document.getElementById('clearBenchmarkLogsBtn');
-
-    openBenchmarkModalBtn?.addEventListener('click', () =>
-    {
-        openModal('startBenchmarkModal');
-    });
-
-    openBenchmarkLogsBtn?.addEventListener('click', async () =>
-    {
-        await renderBenchmarkLogs();
-        openModal('benchmarkLogsModal');
-    });
-
-    closeStartBenchmarkModal?.addEventListener('click', () => closeModal('startBenchmarkModal'));
-    cancelStartBenchmark?.addEventListener('click', () => closeModal('startBenchmarkModal'));
-
-    armBenchmarkBtn?.addEventListener('click', () =>
-    {
-        const task = benchmarkTaskSelect?.value;
-
-        if (!task)
-        {
-            showStatus('Choose a benchmark task first', 'error');
-            return;
-        }
-
-        benchmarkTracker.arm(task);
-        closeModal('startBenchmarkModal');
-        showStatus(`Benchmark armed: ${getBenchmarkTaskLabel(task)}`, 'success');
-    });
-
-    closeBenchmarkLogsModal?.addEventListener('click', () => closeModal('benchmarkLogsModal'));
-    clearBenchmarkLogsBtn?.addEventListener('click', async () =>
-    {
-        await benchmarkTracker.clear();
-        await renderBenchmarkLogs();
-    });
+    // Benchmark tracking is fully automatic — no UI interaction needed from users
 
     document.addEventListener('click', event =>
     {
-        const target = event.target.closest('button, a, .add-type-option, .repo-state-tab, .tab-btn, .btn-icon, .dropdown-item, .issue-actions-menu-item, .clickable-status-badge');
+        // Skip if no active run
+        if (!benchmarkTracker.activeRun) return;
 
-        if (!target || isBenchmarkControlElement(target))
-        {
-            return;
-        }
+        // Skip benchmark control elements
+        if (isBenchmarkControlElement(event.target)) return;
 
-        const info = describeBenchmarkTarget(target);
+        // Skip clicks on the document/body itself (unfocused clicks)
+        if (event.target === document || event.target === document.body) return;
+
+        const info = describeBenchmarkTarget(event.target);
         const interaction = {
             ts: Date.now(),
             type: 'click',
             target: info.target,
-            label: info.label
+            synthetic: false
         };
-
-        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
-        {
-            benchmarkTracker.startFromInteraction(interaction);
-            return;
-        }
 
         benchmarkTracker.recordInteraction(interaction);
     }, true);
@@ -603,15 +572,8 @@ function attachBenchmarkUIHandlers()
             ts: Date.now(),
             type: 'click',
             target: info.target,
-            label: info.label,
             synthetic: true
         };
-
-        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
-        {
-            benchmarkTracker.startFromInteraction(interaction);
-            return;
-        }
 
         benchmarkTracker.recordInteraction(interaction);
     }, true);
@@ -625,23 +587,12 @@ function attachBenchmarkUIHandlers()
             return;
         }
 
-        const selectedText = select.options && select.selectedIndex >= 0
-            ? select.options[select.selectedIndex].textContent.trim()
-            : null;
-
         const interaction = {
             ts: Date.now(),
             type: 'select_change',
             target: select.id ? `#${select.id}` : 'select',
-            label: selectedText,
             synthetic: true
         };
-
-        if (benchmarkTracker.armedTask && !benchmarkTracker.activeRun)
-        {
-            benchmarkTracker.startFromInteraction(interaction);
-            return;
-        }
 
         benchmarkTracker.recordInteraction(interaction);
     }, true);
@@ -1413,11 +1364,7 @@ async function saveGist() {
 
         closeModal('gistEditorModal');
 
-        await completeBenchmarkTask(benchmarkTask, {
-            gistId: currentGist?.id || null,
-            isPublic,
-            filename
-        });
+        await completeBenchmarkTask(benchmarkTask);
 
         // Re-enable filename field
         document.getElementById('gistFilename').disabled = false;
@@ -1562,10 +1509,7 @@ async function saveNewFile() {
 
         closeModal('addFileModal');
 
-        await completeBenchmarkTask('add_gist_file', {
-            gistId: currentGist?.id || null,
-            filename
-        });
+        await completeBenchmarkTask('add_gist_file');
 
     } catch (error) {
         console.error('Error adding file:', error);
@@ -1629,9 +1573,7 @@ async function deleteCurrentGist() {
                 await loadGists();
                 hideGistPreview();
 
-                await completeBenchmarkTask('delete_gist', {
-                    gistName
-                });
+                await completeBenchmarkTask('delete_gist');
 
             } catch (error) {
                 console.error('Error deleting gist:', error);
@@ -1697,10 +1639,7 @@ async function renameGist() {
 
         closeModal('renameGistModal');
 
-        await completeBenchmarkTask('rename_gist', {
-            gistId: currentGist?.id || null,
-            newDescription
-        });
+        await completeBenchmarkTask('rename_gist');
 
     } catch (error) {
         console.error('Error renaming gist:', error);
@@ -1741,10 +1680,7 @@ async function deleteCurrentFile() {
 
                 closeModal('fileEditorModal');
 
-                await completeBenchmarkTask('delete_gist_file', {
-                    gistId: currentGist?.id || null,
-                    filename: currentFile
-                });
+                await completeBenchmarkTask('delete_gist_file');
 
             } catch (error) {
                 console.error('Error deleting file:', error);
@@ -1819,11 +1755,7 @@ async function renameFile() {
 
         closeModal('renameFileModal');
 
-        await completeBenchmarkTask('rename_gist_file', {
-            gistId: currentGist?.id || null,
-            oldFilename: currentFile,
-            newFilename
-        });
+        await completeBenchmarkTask('rename_gist_file');
 
         // Update the file editor modal with new filename
         document.getElementById('currentFileName').textContent = newFilename;
@@ -2418,13 +2350,7 @@ async function convertDraftToIssue() {
         invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
-        await completeBenchmarkTask('convert_draft_to_issue', {
-            projectId: currentProject?.id || null,
-            targetRepository: selectedOption?.value || null,
-            targetProjectId,
-            targetProjectName: targetName,
-            title
-        });
+        await completeBenchmarkTask('convert_draft_to_issue');
 
     } catch (error) {
         console.error('Error converting draft to issue:', error);
@@ -2499,6 +2425,7 @@ function showIssueActionsMenu(button) {
         `;
         convertItem.addEventListener('click', () => {
             closeIssueActionsMenu();
+            autoStartBenchmark('convert_draft_to_issue');
             openConvertDraftModal(issueId, issueTitle, issueBody);
         });
         menu.appendChild(convertItem);
@@ -2515,6 +2442,7 @@ function showIssueActionsMenu(button) {
     `;
     moveItem.addEventListener('click', () => {
         closeIssueActionsMenu();
+        autoStartBenchmark('move_item_to_project');
         openMoveToProjectModal(issueId, issueTitle, issueType);
     });
     menu.appendChild(moveItem);
@@ -2684,12 +2612,7 @@ async function moveToProject() {
         invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
-        await completeBenchmarkTask('move_item_to_project', {
-            sourceProjectId: currentProject?.id || null,
-            targetProjectId,
-            targetProjectName: targetName,
-            itemType: moveItemType
-        });
+        await completeBenchmarkTask('move_item_to_project');
 
     } catch (err) {
         console.error('Move error:', err);
@@ -2702,8 +2625,9 @@ async function moveToProject() {
 async function removeIssueFromProject(itemId) {
     if (!currentProject) return;
 
+    autoStartBenchmark('remove_issue_from_project');
     if (!confirm('Remove this issue from the project? The issue will still exist on GitHub.')) {
-        await cancelBenchmarkTask('remove_issue_from_project', 'confirm_remove_issue_from_project_declined');
+        await cancelBenchmarkTask('remove_issue_from_project', 'user_declined_confirm');
         return;
     }
 
@@ -2755,10 +2679,7 @@ async function removeIssueFromProject(itemId) {
         invalidateProjectCache(currentProject.id);
         await loadProjectIssues(currentProject.id);
 
-        await completeBenchmarkTask('remove_issue_from_project', {
-            projectId: currentProject?.id || null,
-            itemId
-        });
+        await completeBenchmarkTask('remove_issue_from_project');
 
     } catch (error) {
         console.error('Error removing issue from project:', error);
@@ -2850,12 +2771,7 @@ async function deleteIssueCompletely(issueUrl, issueTitle) {
             await loadProjectIssues(currentProject.id);
         }
 
-        await completeBenchmarkTask('delete_repo_issue', {
-            owner,
-            repo,
-            issueNumber: Number(issueNumber),
-            issueTitle
-        });
+        await completeBenchmarkTask('delete_repo_issue');
 
     } catch (error) {
         console.error('Error deleting issue:', error);
@@ -3223,11 +3139,7 @@ async function addDraftToProject() {
         invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
-        await completeBenchmarkTask('create_project_draft', {
-            projectId: currentProject?.id || null,
-            title,
-            hasBody: !!body
-        });
+        await completeBenchmarkTask('create_project_draft');
 
     } catch (error) {
         console.error('Error adding draft to project:', error);
@@ -3338,12 +3250,7 @@ async function addIssueToProject() {
         invalidateProjectCache(projectId);
         await loadProjectIssues(projectId);
 
-        await completeBenchmarkTask('create_project_issue', {
-            projectId: currentProject?.id || null,
-            repository: selectedOption?.value || null,
-            title,
-            hasBody: !!body
-        });
+        await completeBenchmarkTask('create_project_issue');
 
     } catch (error) {
         console.error('Error adding issue to project:', error);
@@ -3436,10 +3343,7 @@ async function renameProject() {
 
         closeModal('renameProjectModal');
 
-        await completeBenchmarkTask('rename_project', {
-            projectId: currentProject?.id || null,
-            newTitle
-        });
+        await completeBenchmarkTask('rename_project');
 
     } catch (error) {
         console.error('Error renaming project:', error);
@@ -3671,12 +3575,7 @@ async function createNewProject() {
         // Trigger change event to load the project
         await loadProjectIssues(newProjectId);
 
-        await completeBenchmarkTask('create_project', {
-            projectId: newProjectId,
-            title,
-            linkedRepositoryId: selectedRepoNodeId || null,
-            isPublic
-        });
+        await completeBenchmarkTask('create_project');
 
     } catch (error) {
         console.error('Error creating project:', error);
@@ -3776,11 +3675,7 @@ async function saveProjectEdits() {
 
         closeModal('editProjectModal');
 
-        await completeBenchmarkTask('edit_project_settings', {
-            projectId: currentProject?.id || null,
-            isPublic,
-            descriptionLength: newDescription.length
-        });
+        await completeBenchmarkTask('edit_project_settings');
 
     } catch (error) {
         console.error('Error updating project:', error);
@@ -4139,6 +4034,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.classList.add('popout');
     }
 
+    // Register benchmark click/change/input listeners
+    attachBenchmarkUIHandlers();
+
     // ── Quick Capture listeners ──
     const qcTextarea = document.getElementById('qcTextarea');
     const qcSaveBtn = document.getElementById('qcSaveBtn');
@@ -4236,9 +4134,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Tab switching
-    attachBenchmarkUIHandlers();
-    updateBenchmarkStateUI();
-
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -4311,6 +4206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // New repo issue modal
     document.getElementById('newRepoIssueBtn').addEventListener('click', () => {
         if (!currentRepoFullName) return;
+        autoStartBenchmark('create_repo_issue');
         document.getElementById('newIssueRepoName').textContent = currentRepoFullName;
         document.getElementById('newIssueTitle').value = '';
         document.getElementById('newIssueBody').value = '';
@@ -4346,11 +4242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('newRepoIssueModal').style.display = 'none';
             showStatus(`Issue #${issue.number} created`, 'success');
             await loadRepoIssues(currentRepoFullName);
-            await completeBenchmarkTask('create_repo_issue', {
-                repoFullName: currentRepoFullName,
-                issueNumber: issue.number,
-                title
-            });
+            await completeBenchmarkTask('create_repo_issue');
         } catch (err) {
             showStatus('Failed to create issue: ' + err.message, 'error');
         } finally {
@@ -4381,25 +4273,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Create new gist button
     document.getElementById('createNewGistBtn').addEventListener('click', () => {
         currentGist = null;
+        autoStartBenchmark('create_gist');
         openCreateGistModal();
     });
 
     // Create new project button
     document.getElementById('createNewProjectBtn').addEventListener('click', async () => {
+        autoStartBenchmark('create_project');
         await openCreateProjectModal();
     });
 
     // Edit gist button
-    document.getElementById('editGistBtn').addEventListener('click', openFileEditorModal);
+    document.getElementById('editGistBtn').addEventListener('click', () => {
+        autoStartBenchmark('edit_gist');
+        openFileEditorModal();
+    });
 
     // Add file button
-    document.getElementById('addFileBtn').addEventListener('click', openAddFileModal);
+    document.getElementById('addFileBtn').addEventListener('click', () => {
+        autoStartBenchmark('add_gist_file');
+        openAddFileModal();
+    });
 
     // Rename gist button
-    document.getElementById('renameGistBtn').addEventListener('click', openRenameGistModal);
+    document.getElementById('renameGistBtn').addEventListener('click', () => {
+        autoStartBenchmark('rename_gist');
+        openRenameGistModal();
+    });
 
     // Delete gist button
-    document.getElementById('deleteGistBtn').addEventListener('click', deleteCurrentGist);
+    document.getElementById('deleteGistBtn').addEventListener('click', () => {
+        autoStartBenchmark('delete_gist');
+        deleteCurrentGist();
+    });
 
     // Gist editor modal
     document.getElementById('closeGistEditorModal').addEventListener('click', async () => {
@@ -4432,8 +4338,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('cancelFileEditor').addEventListener('click', () => closeModal('fileEditorModal'));
     document.getElementById('saveFileChanges').addEventListener('click', saveFileChanges);
     document.getElementById('fileSelector').addEventListener('change', loadSelectedFile);
-    document.getElementById('renameFileBtn').addEventListener('click', openRenameFileModal);
-    document.getElementById('deleteFileBtn').addEventListener('click', deleteCurrentFile);
+    document.getElementById('renameFileBtn').addEventListener('click', () => {
+        autoStartBenchmark('rename_gist_file');
+        openRenameFileModal();
+    });
+    document.getElementById('deleteFileBtn').addEventListener('click', () => {
+        autoStartBenchmark('delete_gist_file');
+        deleteCurrentFile();
+    });
 
     // Delete confirm modal
     document.getElementById('closeDeleteConfirmModal').addEventListener('click', () => closeModal('deleteConfirmModal'));
@@ -4513,18 +4425,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Project actions
     document.getElementById('addIssueBtn').addEventListener('click', openChooseAddTypeModal);
-    document.getElementById('editProjectBtn').addEventListener('click', openEditProjectModal);
-    document.getElementById('renameProjectBtn').addEventListener('click', openRenameProjectModal);
-    document.getElementById('deleteProjectBtn').addEventListener('click', deleteCurrentProject);
+    document.getElementById('editProjectBtn').addEventListener('click', () => {
+        autoStartBenchmark('edit_project_settings');
+        openEditProjectModal();
+    });
+    document.getElementById('renameProjectBtn').addEventListener('click', () => {
+        autoStartBenchmark('rename_project');
+        openRenameProjectModal();
+    });
+    document.getElementById('deleteProjectBtn').addEventListener('click', () => {
+        autoStartBenchmark('delete_repo_issue');
+        deleteCurrentProject();
+    });
 
     // Choose add type modal
     document.getElementById('closeChooseAddTypeModal').addEventListener('click', () => closeModal('chooseAddTypeModal'));
     document.getElementById('chooseAddIssue').addEventListener('click', () => {
         closeModal('chooseAddTypeModal');
+        autoStartBenchmark('create_project_issue');
         openAddIssueModal();
     });
     document.getElementById('chooseAddDraft').addEventListener('click', () => {
         closeModal('chooseAddTypeModal');
+        autoStartBenchmark('create_project_draft');
         openAddDraftModal();
     });
 
