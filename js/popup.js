@@ -4,6 +4,17 @@ const CONFIG = {
     REDIRECT_URI: chrome.identity.getRedirectURL()
 };
 
+
+async function getParticipantId() {
+    const result = await chrome.storage.local.get(['participantId']);
+    if (result.participantId) return result.participantId;
+ 
+    // Fallback: generate here if background.js didn't run yet
+    const id = crypto.randomUUID();
+    await chrome.storage.local.set({ participantId: id });
+    return id;
+}
+
 // ============================================================================
 // showPopover — unified positioning engine for tooltips, menus & dropdowns
 // ============================================================================
@@ -172,9 +183,21 @@ const benchmarkTracker = {
 
     async appendLog(log)
     {
+        const participantId = await getParticipantId();
+        const enrichedLog = { ...log, participantId };
+
+        // Save full log locally
         const logs = await this.getLogs();
-        logs.push(log);
+        logs.push(enrichedLog);
         await this.saveLogs(logs);
+
+        // Send to D1 — strip metadata to avoid leaking titles/names
+        const { metadata, ...safeLog } = enrichedLog;
+        fetch(`${CONFIG.BACKEND_URL}/api/benchmark`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(safeLog)
+        }).catch(err => console.warn('[Benchmark] Remote sync failed:', err.message));
     },
 
     arm(task)
@@ -260,7 +283,6 @@ const benchmarkTracker = {
             ts: interaction?.ts || Date.now(),
             type: interaction?.type || 'interaction',
             target: interaction?.target || null,
-            label: interaction?.label || null,
             synthetic: !!interaction?.synthetic
         };
 
