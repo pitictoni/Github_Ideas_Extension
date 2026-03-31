@@ -430,66 +430,11 @@ function formatDurationMs(durationMs)
     return `${(durationMs / 1000).toFixed(2)} s`;
 }
 
-async function renderBenchmarkLogs()
-{
-    const summary = document.getElementById('benchmarkLogsSummary');
-    const list = document.getElementById('benchmarkLogsList');
 
-    if (!summary || !list)
-    {
-        return;
-    }
-
-    const logs = await benchmarkTracker.getLogs();
-    const completed = logs.filter(log => log.success);
-    const avg = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-
-    summary.innerHTML = `
-        <div class="benchmark-summary-card">
-            <div class="benchmark-summary-label">Runs</div>
-            <div class="benchmark-summary-value">${logs.length}</div>
-        </div>
-        <div class="benchmark-summary-card">
-            <div class="benchmark-summary-label">Completed</div>
-            <div class="benchmark-summary-value">${completed.length}</div>
-        </div>
-        <div class="benchmark-summary-card">
-            <div class="benchmark-summary-label">Avg measured clicks</div>
-            <div class="benchmark-summary-value">${avg(completed.map(log => log.clickCount)).toFixed(1)}</div>
-        </div>
-        <div class="benchmark-summary-card">
-            <div class="benchmark-summary-label">Avg time</div>
-            <div class="benchmark-summary-value">${formatDurationMs(avg(completed.map(log => log.durationMs)))}</div>
-        </div>
-    `;
-
-    if (!logs.length)
-    {
-        list.innerHTML = '<div class="benchmark-log-empty">No benchmark runs recorded yet.</div>';
-        return;
-    }
-
-    list.innerHTML = logs.slice().reverse().map(log => `
-        <div class="benchmark-log-item">
-            <div class="benchmark-log-top">
-                <strong>${getBenchmarkTaskLabel(log.task)}</strong>
-                <span class="benchmark-log-status ${log.success ? 'success' : 'cancelled'}">${log.success ? 'Completed' : 'Cancelled'}</span>
-            </div>
-            <div class="benchmark-log-meta">Measured clicks: ${log.clickCount} · Raw clicks: ${log.rawClickCount ?? log.clickCount} · Time: ${formatDurationMs(log.durationMs)}</div>
-            <div class="benchmark-log-meta">Inputs: ${(log.inputFields && log.inputFields.length) ? log.inputFields.join(', ') : 'none'}</div>
-            ${log.cancelReason ? `<div class="benchmark-log-meta">Cancel reason: ${log.cancelReason}</div>` : ''}
-        </div>
-    `).join('');
-}
 
 async function refreshBenchmarkLogsIfVisible()
 {
-    const modal = document.getElementById('benchmarkLogsModal');
-
-    if (modal && modal.style.display === 'flex')
-    {
-        await renderBenchmarkLogs();
-    }
+    // Logs UI removed — data goes directly to Cloudflare D1
 }
 
 window.debugBenchmarkLogs = async function ()
@@ -509,7 +454,7 @@ function isBenchmarkControlElement(element)
     }
 
     return !!element.closest(
-        '#openBenchmarkModalBtn, #openBenchmarkLogsBtn, #benchmarkStateBadge, #startBenchmarkModal, #benchmarkLogsModal'
+        '#openBenchmarkModalBtn, #benchmarkStateBadge, #startBenchmarkModal'
     );
 }
 
@@ -1419,6 +1364,9 @@ async function saveFileChanges() {
         return;
     }
 
+    // Start edit_gist benchmark on first real action (clicking Save)
+    autoStartBenchmark('edit_gist');
+
     const saveBtn = document.getElementById('saveFileChanges');
     saveBtn.disabled = true;
 
@@ -1441,6 +1389,8 @@ async function saveFileChanges() {
         displayGistPreview(currentGist);
 
         closeModal('fileEditorModal');
+
+        await completeBenchmarkTask('edit_gist');
 
     } catch (error) {
         console.error('Error saving file:', error);
@@ -4285,7 +4235,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Edit gist button
     document.getElementById('editGistBtn').addEventListener('click', () => {
-        autoStartBenchmark('edit_gist');
+        // edit_gist benchmark starts when user clicks Save inside the modal
+        // rename_gist_file / delete_gist_file start their own benchmarks
         openFileEditorModal();
     });
 
@@ -4334,8 +4285,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('saveNewFile').addEventListener('click', saveNewFile);
 
     // File editor modal
-    document.getElementById('closeFileEditorModal').addEventListener('click', () => closeModal('fileEditorModal'));
-    document.getElementById('cancelFileEditor').addEventListener('click', () => closeModal('fileEditorModal'));
+    document.getElementById('closeFileEditorModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('edit_gist', 'close_file_editor_modal');
+        await cancelBenchmarkTask('rename_gist_file', 'close_file_editor_modal');
+        await cancelBenchmarkTask('delete_gist_file', 'close_file_editor_modal');
+        closeModal('fileEditorModal');
+    });
+    document.getElementById('cancelFileEditor').addEventListener('click', async () => {
+        await cancelBenchmarkTask('edit_gist', 'cancel_file_editor_modal');
+        await cancelBenchmarkTask('rename_gist_file', 'cancel_file_editor_modal');
+        await cancelBenchmarkTask('delete_gist_file', 'cancel_file_editor_modal');
+        closeModal('fileEditorModal');
+    });
     document.getElementById('saveFileChanges').addEventListener('click', saveFileChanges);
     document.getElementById('fileSelector').addEventListener('change', loadSelectedFile);
     document.getElementById('renameFileBtn').addEventListener('click', () => {
@@ -4348,8 +4309,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Delete confirm modal
-    document.getElementById('closeDeleteConfirmModal').addEventListener('click', () => closeModal('deleteConfirmModal'));
-    document.getElementById('cancelDelete').addEventListener('click', () => closeModal('deleteConfirmModal'));
+    document.getElementById('closeDeleteConfirmModal').addEventListener('click', async () => {
+        await cancelBenchmarkTask('delete_gist', 'close_delete_confirm_modal');
+        await cancelBenchmarkTask('delete_gist_file', 'close_delete_confirm_modal');
+        await cancelBenchmarkTask('delete_repo_issue', 'close_delete_confirm_modal');
+        closeModal('deleteConfirmModal');
+    });
+    document.getElementById('cancelDelete').addEventListener('click', async () => {
+        await cancelBenchmarkTask('delete_gist', 'cancel_delete_confirm_modal');
+        await cancelBenchmarkTask('delete_gist_file', 'cancel_delete_confirm_modal');
+        await cancelBenchmarkTask('delete_repo_issue', 'cancel_delete_confirm_modal');
+        closeModal('deleteConfirmModal');
+    });
     document.getElementById('confirmDelete').addEventListener('click', confirmDeleteAction);
 
     // Rename gist modal

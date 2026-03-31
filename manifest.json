@@ -1,6 +1,6 @@
 {
   "name": "GitHub Management Extension",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "manifest_version": 3,
   "description": "Manage your GitHub Issues and Gists",
   "icons": {
