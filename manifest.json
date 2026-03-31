@@ -1,6 +1,6 @@
 {
   "name": "GitHub Management Extension",
-  "version": "0.10.1",
+  "version": "1.0.0",
   "manifest_version": 3,
   "description": "Manage your GitHub Issues and Gists",
   "icons": {
@@ -23,7 +23,7 @@
     }
   },
   "background": {
-    "service_worker": "js/background.js"
+    "service_worker": "background.js"
   },
   "host_permissions": [
     "https://api.github.com/*",

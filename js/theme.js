@@ -15,7 +15,7 @@
         });
     }
 
-    
+
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         chrome.storage.local.set({ theme });
